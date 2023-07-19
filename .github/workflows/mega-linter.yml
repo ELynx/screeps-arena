@@ -43,7 +43,7 @@ jobs:
           VALIDATE_ALL_CODEBASE: true
           DISABLE: COPYPASTE
           DISABLE_LINTERS: SPELL_CSPELL
-          FILTER_REGEX_EXCLUDE: (src\/[\w-]+\/typings\/.*\.d\.ts|dist\/.*)
+          FILTER_REGEX_EXCLUDE: (src\/[\w-]+\/jsconfig.json|src\/[\w-]+\/typings\/.*\.d\.ts|dist\/.*)
 
       # Upload MegaLinter artifacts
       - name: Archive production artifacts

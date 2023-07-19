@@ -4,9 +4,12 @@ import clear from 'rollup-plugin-clear'
 import resolve from '@rollup/plugin-node-resolve'
 import commonjs from '@rollup/plugin-commonjs'
 import typescript from 'rollup-plugin-typescript2'
+import copy from 'rollup-plugin-copy'
+
 import fg from 'fast-glob'
 
 let targetArena = ''
+
 if (process.argv[3] === '--config-') {
   // we running dynamic mode
   targetArena = process.argv[4] || ''
@@ -41,20 +44,29 @@ function getOptions (arenaSrc) {
       clear({ targets: targetArena === '' ? ['dist'] : [outDir] }), // If targeted build, only clear target sub-directory
       resolve({ rootDir: 'src' }),
       commonjs(),
-      typescript({ tsconfig: './tsconfig.json' })
+      typescript({ tsconfig: './tsconfig.json' }),
+      copy({
+        targets: [
+          { src: arenaSrc + '/jsconfig.json', dest: outDir },
+          { src: arenaSrc + '/typings', dest: outDir }
+        ]
+      })
     ]
   }
+
   return options
 }
 
-const arenas = fg.sync(`src/${targetArena}`, { onlyDirectories: true })
+let arenas = fg.sync(`src/*${targetArena}*`, { onlyDirectories: true })
+arenas = arenas.filter(x => x.split('/').length === 2) // only one level below
+
 if (arenas.length === 0) {
   throw new Error('No matching arenas found in src/. Exiting')
 } else {
-  if (targetArena === '') {
-    console.log(`No arena targeted. Building all ${arenas.length} arenas.`)
-  } else {
-    console.log(`Buidling ${arenas.length} arena(s) for target "${targetArena}"`)
+  console.log('Building arenas')
+
+  for (const arena of arenas) {
+    console.log(arena)
   }
 }
 

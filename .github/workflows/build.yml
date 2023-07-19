@@ -16,24 +16,30 @@ jobs:
       contents: write
     steps:
       # Git Checkout
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+
+      # Node
+      - name: Use Node.js 18.x
+        uses: actions/setup-node@v3
         with:
-          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+          node-version: 18.x
 
       # Build Typescript
       - name: Build
-        id: bts
-        uses: alexthemaster/action-build-typescript@v1.3.1
+        run: |
+          npm install
+          npm install rollup
+          yarn
+          npm run build
 
       # Push new commit if applicable (for now works only on PR from same repository, not from forks)
       - name: Prepare commit
-        if: github.ref != 'refs/heads/main' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
-        run: sudo chown -Rc $UID .git/
+        run: |
+          sudo chown -Rc $UID .git/
+          git add --renormalize dist/
       - name: Commit and push applied linter fixes
-        if: github.ref != 'refs/heads/main' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
           branch: ${{ github.event.pull_request.head.ref || github.head_ref || github.ref }}
           commit_message: "[Build Typescript] Commit built code"
+          file_pattern: "package.json dist/*"
