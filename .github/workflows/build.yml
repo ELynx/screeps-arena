@@ -30,7 +30,6 @@ jobs:
           npm install
           npm install rollup
           yarn
-          npm version patch
           npm run build
 
       # Push new commit if applicable (for now works only on PR from same repository, not from forks)
