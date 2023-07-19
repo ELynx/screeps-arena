@@ -23,7 +23,7 @@ jobs:
       # Build Typescript
       - name: Build
         id: bts
-        uses: alexthemaster/action-build-typescript@v1.3.3
+        uses: alexthemaster/action-build-typescript@v1.3.1
 
       # Push new commit if applicable (for now works only on PR from same repository, not from forks)
       - name: Prepare commit
