@@ -4,7 +4,10 @@
   "description": "Screeps Arena Codebase",
   "main": "index.js",
   "scripts": {
-    "build": "rollup -c --config-"
+    "build": "rollup -c --config-",
+    "test": "npm run test-unit",
+    "test-unit": "mocha test/unit/**/*.ts",
+    "watch": "rollup -cw --config-"
   },
   "engines": {
     "node": "18.x"
