@@ -49,7 +49,8 @@ function getOptions (arenaSrc) {
   return options
 }
 
-const arenas = fg.sync(`src/*${targetArena}*`, { onlyDirectories: true })
+let arenas = fg.sync(`src/*${targetArena}*`, { onlyDirectories: true })
+arenas = arenas.filter(x => x.split('/').length === 2) // only one level below
 
 if (arenas.length === 0) {
   throw new Error('No matching arenas found in src/. Exiting')
