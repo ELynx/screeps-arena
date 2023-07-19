@@ -41,7 +41,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_ALL_CODEBASE: true
-          DISABLE_LINTERS: COPYPASTE,SPELL_CSPELL
+          DISABLE: COPYPASTE
+          DISABLE_LINTERS: SPELL_CSPELL
           FILTER_REGEX_EXCLUDE: (src\/[\w-]+\/typings\/.*\.d\.ts|dist\/.*)
 
       # Upload MegaLinter artifacts
