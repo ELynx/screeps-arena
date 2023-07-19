@@ -47,8 +47,8 @@ function getOptions (arenaSrc) {
       typescript({ tsconfig: './tsconfig.json' }),
       copy({
         targets: [
-          { src: arenaSrc + '/jsconfig.json', dest: outDir + '/jsconfig.json' },
-          { src: arenaSrc + '/typings', dest: outDir + '/typings' }
+          { src: arenaSrc + '/jsconfig.json', dest: outDir },
+          { src: arenaSrc + '/typings', dest: outDir }
         ]
       })
     ]
