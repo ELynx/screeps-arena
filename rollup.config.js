@@ -49,7 +49,7 @@ function getOptions (arenaSrc) {
   return options
 }
 
-const arenas = fg.sync(`src/${targetArena}`, { onlyDirectories: true })
+const arenas = fg.sync(`src/${targetArena}/`, { onlyDirectories: true })
 
 if (arenas.length === 0) {
   throw new Error('No matching arenas found in src/. Exiting')
