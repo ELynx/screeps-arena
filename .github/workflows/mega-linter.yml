@@ -42,7 +42,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_ALL_CODEBASE: true
           DISABLE_LINTERS: SPELL_CSPELL
-          FILTER_REGEX_EXCLUDE: (src\/[\w-]+\/typings\/.*\.d\.ts)
+          FILTER_REGEX_EXCLUDE: (src\/[\w-]+\/typings\/.*\.d\.ts|dist\/.*)
 
       # Upload MegaLinter artifacts
       - name: Archive production artifacts
