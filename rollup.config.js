@@ -56,7 +56,7 @@ if (arenas.length === 0) {
 } else {
   console.log('Building arenas')
 
-  for (const arena in arenas) {
+  for (const arena of arenas) {
     console.log(arena)
   }
 }
