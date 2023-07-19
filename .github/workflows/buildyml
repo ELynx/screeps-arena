@@ -1,15 +1,37 @@
+# Build TypeScript and put to dist
 name: Build
-on: 
-    push: 
-        branches:
-            - master
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions: read-all
+
 jobs:
-    build:
-        runs-on: ubuntu-latest
-        steps: 
-            - name: Checkout project
-              uses: actions/checkout@v3
-            - name: Build and push
-              uses: alexthemaster/action-build-typescript@v1.3.3
-              with:
-                pushToBranch: false
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps: 
+      # Git Checkout
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      # Build Typescript
+      - name: Build
+        id: bts
+        uses: alexthemaster/action-build-typescript@v1.3.3
+
+      # Push new commit if applicable (for now works only on PR from same repository, not from forks)
+      - name: Prepare commit
+        if: github.ref != 'refs/heads/main' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+        run: sudo chown -Rc $UID .git/
+      - name: Commit and push applied linter fixes
+        if: github.ref != 'refs/heads/main' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          branch: ${{ github.event.pull_request.head.ref || github.head_ref || github.ref }}
+          commit_message: "[Build Typescript] Commit built code"
