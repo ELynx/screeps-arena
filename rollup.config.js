@@ -7,6 +7,7 @@ import typescript from 'rollup-plugin-typescript2'
 import fg from 'fast-glob'
 
 let targetArena = ''
+
 if (process.argv[3] === '--config-') {
   // we running dynamic mode
   targetArena = process.argv[4] || ''
@@ -44,17 +45,19 @@ function getOptions (arenaSrc) {
       typescript({ tsconfig: './tsconfig.json' })
     ]
   }
+
   return options
 }
 
 const arenas = fg.sync(`src/${targetArena}`, { onlyDirectories: true })
+
 if (arenas.length === 0) {
   throw new Error('No matching arenas found in src/. Exiting')
 } else {
-  if (targetArena === '') {
-    console.log(`No arena targeted. Building all ${arenas.length} arenas.`)
-  } else {
-    console.log(`Buidling ${arenas.length} arena(s) for target "${targetArena}"`)
+  console.log('Building arenas')
+
+  for (let arena in arenas) {
+    console.log(arena)
   }
 }
 
