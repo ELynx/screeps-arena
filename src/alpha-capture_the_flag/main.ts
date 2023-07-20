@@ -1,7 +1,7 @@
 import { Direction, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Creep, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
-import { ATTACK, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST } from 'game/constants'
+import { ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST } from 'game/constants'
 
 function sortById(a: GameObject, b: GameObject) : number {
   return a.id.toString().localeCompare(b.id.toString())
@@ -212,6 +212,37 @@ function autoRanged(creep: Creep, attackables: Attackable[]) {
 }
 
 function autoHeal(creep: Creep, healables: Creep[]) {
+  if (!hasActiveBodyPart(creep, HEAL)) return
+
+  if (notMaxHits(creep)) {
+    creep.heal(creep)
+    return
+  }
+
+  let inRange = healables.map(
+    function(target: Creep) : AttackableAndRange {
+      let range = getRange(this, target)
+      return new AttackableAndRange(target, range)
+    }, creep
+  ).filter(
+    function(target: AttackableAndRange) : boolean {
+      return target.range <= 3
+    }
+  )
+
+  if (inRange.length === 0) return
+
+  let inTouch = inRange.find(
+    function(target: AttackableAndRange) : boolean {
+      return target.range <= 1
+    }
+  )
+
+  if (inTouch !== undefined) {
+    creep.heal(inTouch.attackable as Creep)
+  } else {
+    creep.rangedHeal(inRange[0].attackable as Creep)
+  }
 }
 
 function autoAll(creep: Creep, attackables: Attackable[], healables: Creep[]) {
