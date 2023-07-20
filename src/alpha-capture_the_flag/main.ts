@@ -1,7 +1,7 @@
-import { Direction, getDirection, getObjectsByPrototype, getTicks } from 'game/utils'
+import { Direction, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Creep, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
-import { ATTACK, MOVE, RESOURCE_ENERGY, TOWER_ENERGY_COST } from 'game/constants'
+import { ATTACK, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST } from 'game/constants'
 
 function sortById(a: GameObject, b: GameObject) : number {
   return a.id.toString().localeCompare(b.id.toString())
@@ -172,7 +172,43 @@ function autoMelee(creep: Creep, attackables: Attackable[]) {
   }
 }
 
+class AttackableAndRange {
+  attackable: Attackable
+  range: number
+
+  constructor (attackable: Attackable, range: number) {
+    this.attackable = attackable
+    this.range = range
+  }
+}
+
+function rangedMassAttackPower(target: AttackableAndRange) : number {
+  return RANGED_ATTACK_POWER * (RANGED_ATTACK_DISTANCE_RATE[target.range] || 0)
+}
+
 function autoRanged(creep: Creep, attackables: Attackable[]) {
+  if (!hasActiveBodyPart(creep, RANGED_ATTACK)) return
+
+  let inRange = attackables.map(
+    function(target: Attackable) : AttackableAndRange {
+      let range = getRange(this, target)
+      return new AttackableAndRange(target, range)
+    }, creep
+  ).filter(
+    function(target: AttackableAndRange) : boolean {
+      return target.range <= 3
+    }
+  )
+
+  if (inRange.length === 0) return
+
+  let totalMassAttackPower = inRange.map(rangedMassAttackPower).reduce((sum, current) => sum + current, 0)
+
+  if (totalMassAttackPower >= RANGED_ATTACK_POWER) {
+    creep.rangedMassAttack()
+  } else {
+    creep.rangedAttack(inRange[0].attackable)
+  }
 }
 
 function autoHeal(creep: Creep, healables: Creep[]) {
