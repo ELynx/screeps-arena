@@ -26,7 +26,7 @@ class PlayerInfo {
   tower1: StructureTower | undefined
   tower2: StructureTower | undefined
 
-  creeps: Creep[]
+  creeps: Creep[] = []
 }
 
 function fillPlayerInfo (whoFunction: Function) : PlayerInfo {
