@@ -120,25 +120,6 @@ function notMaxHits (creep: Creep) : boolean {
   return creep.hits < creep.hitsMax
 }
 
-class StructureTowerScore {
-  creep: Creep
-  range: number
-  score: number
-
-  constructor (creep: Creep, range: number) {
-    this.creep = creep
-    this.range = range
-    this.score = this.calculateScore()
-  }
-
-  private calculateScore () : number {
-    // speed
-    if (this.range > TOWER_RANGE) return 0
-
-    return 11
-  }
-}
-
 function towerSomethingPower(startAmount: number, startRange: number) : number {
   let amount = startAmount
   let range = startRange
@@ -152,12 +133,46 @@ function towerSomethingPower(startAmount: number, startRange: number) : number {
   return amount
 }
 
-function towerAttackPower(target: StructureTowerScore) : number {
-  return towerSomethingPower(TOWER_POWER_ATTACK, target.range)
-}
+class StructureTowerScore {
+  creep: Creep
+  range: number
+  score: number
 
-function towerHealPower(target: StructureTowerScore) : number {
-  return towerSomethingPower(TOWER_POWER_HEAL, target.range)
+  constructor (creep: Creep, range: number) {
+    this.creep = creep
+    this.range = range
+    this.score = this.calculateScore()
+  }
+
+  private calculateScore () : number {
+    // speed up process
+    if (this.range > TOWER_RANGE) return 0
+
+    if (this.creep.my) {
+      const hitsLost = this.creep.hitsMax - this.creep.hits
+      const percent = hitsLost / this.creep.hitsMax * 100
+      const withFalloff = towerSomethingPower(percent, this.range)
+
+      return Math.round(withFalloff)
+    }
+
+    let bodyCost = 0
+    for (const bodyPart of this.creep.body) {
+      if (bodyPart.hits <= 0) continue
+
+      // default pair of X + MOVE is 10 in sum
+      // ignore mutants for simplicity
+      if (bodyPart.type === ATTACK || bodyPart.type === HEAL) bodyCost += 6
+      else bodyCost += 4
+    }
+
+    // again ignore mutants for simplicity
+    const maxBodyCost = this.creep.body.length * 5
+    const percent = bodyCost / maxBodyCost * 100
+    const withFalloff = towerSomethingPower(percent, this.range)
+
+    return Math.round(withFalloff)
+  }
 }
 
 function operateTower (tower: StructureTower): void {
