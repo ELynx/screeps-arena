@@ -117,6 +117,18 @@ function notMaxHits (creep: Creep) : boolean {
   return creep.hits < creep.hitsMax
 }
 
+type Attackable = Creep | Structure
+
+class AttackableAndRange {
+  attackable: Attackable
+  range: number
+
+  constructor (attackable: Attackable, range: number) {
+    this.attackable = attackable
+    this.range = range
+  }
+}
+
 function operateTower (tower: StructureTower): void {
   if (tower.cooldown > 0) return
   if (tower.store.getUsedCapacity(RESOURCE_ENERGY) < TOWER_ENERGY_COST) return
@@ -162,7 +174,7 @@ function advanceFlagGoal (flagGoal: FlagGoal) {
   }
 }
 
-type Attackable = Creep | Structure
+
 
 function autoMelee (creep: Creep, attackables: Attackable[]) {
   if (!hasActiveBodyPart(creep, ATTACK)) return
@@ -172,16 +184,6 @@ function autoMelee (creep: Creep, attackables: Attackable[]) {
     const target = inRange[0]
     creep.attack(target)
     new Visual().line(creep, target)
-  }
-}
-
-class AttackableAndRange {
-  attackable: Attackable
-  range: number
-
-  constructor (attackable: Attackable, range: number) {
-    this.attackable = attackable
-    this.range = range
   }
 }
 
