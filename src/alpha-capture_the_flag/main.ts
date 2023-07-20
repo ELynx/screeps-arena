@@ -6,7 +6,7 @@ let _flagCache: Flag[]
 let _towerCache: StructureTower[]
 let _creepCache: Creep[]
 
-function _fillCaches () {
+function _fillCaches () : void {
   if (_flagCache === undefined) {
     _flagCache = getObjectsByPrototype(Flag)
   }
@@ -29,7 +29,9 @@ class PlayerInfo {
   creeps: Creep[] = []
 }
 
-function fillPlayerInfo (whoFunction: Function) : PlayerInfo {
+type Ownable = Flag | StructureTower | Creep
+
+function fillPlayerInfo (whoFunction: (x: Ownable) => boolean) : PlayerInfo {
   _fillCaches()
 
   const playerInfo = new PlayerInfo()
@@ -51,13 +53,13 @@ let enemyPlayerInfo : PlayerInfo
 export function loop () {
   if (getTicks() === 1) {
     myPlayerInfo = fillPlayerInfo(
-      function my (what: Flag | StructureTower | Creep) : boolean {
+      function my (what: Ownable) : boolean {
         return what.my === true
       }
     )
 
     enemyPlayerInfo = fillPlayerInfo(
-      function enemy (what: Flag | StructureTower | Creep) : boolean {
+      function enemy (what: Ownable) : boolean {
         return what.my === false
       }
     )
