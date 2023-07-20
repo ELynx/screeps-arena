@@ -132,7 +132,10 @@ class StructureTowerScore {
   }
 
   private calculateScore () : number {
-    return 0
+    // speed
+    if (this.range > TOWER_RANGE) return 0
+
+    return 11
   }
 }
 
@@ -161,7 +164,7 @@ function operateTower (tower: StructureTower): void {
   if (tower.cooldown > 0) return
   if (tower.store.getUsedCapacity(RESOURCE_ENERGY) < TOWER_ENERGY_COST) return
 
-  const wasteful = tower.store.getFreeCapacity(RESOURCE_ENERGY) < TOWER_ENERGY_COST
+  const saveEnergy = tower.store.getFreeCapacity(RESOURCE_ENERGY) > TOWER_ENERGY_COST
 
   let allCreepsInRange = allCreeps()
   .filter(operational)
@@ -183,14 +186,21 @@ function operateTower (tower: StructureTower): void {
       return target.range <= TOWER_RANGE
     }
   )
+  .sort(
+    function (a: StructureTowerScore, b: StructureTowerScore) : number {
+      return b.score - a.score
+    }
+  )
 
   if (allCreepsInRange.length === 0) return
 
-  const target = allCreepsInRange[0].creep
-  if (target.my) {
-    tower.heal(target)
+  const target = allCreepsInRange[0]
+  if (saveEnergy && target.score < 10) return
+
+  if (target.creep.my) {
+    tower.heal(target.creep)
   } else {
-    tower.attack(target)
+    tower.attack(target.creep)
   }
 }
 
