@@ -1,8 +1,8 @@
-import { Direction, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Creep, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
-import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
-import { ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_POWER_ATTACK, TOWER_POWER_HEAL, TOWER_RANGE } from 'game/constants'
+import { ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE } from 'game/constants'
+import { Direction, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Visual } from 'game/visual'
+import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
 function sortById (a: GameObject, b: GameObject) : number {
   return a.id.toString().localeCompare(b.id.toString())
