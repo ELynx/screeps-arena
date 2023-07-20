@@ -3,21 +3,27 @@ import { Creep, Position, StructureTower } from 'game/prototypes'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
 let _flagCache: Flag[]
-let _towerCache: StructureTower[]
-let _creepCache: Creep[]
-
-function _fillCaches () : void {
+function allFlags() : Flag[] {
   if (_flagCache === undefined) {
     _flagCache = getObjectsByPrototype(Flag)
   }
+  return _flagCache
+}
 
+let _towerCache: StructureTower[]
+function allTowers() : StructureTower[] {
   if (_towerCache === undefined) {
     _towerCache = getObjectsByPrototype(StructureTower)
   }
+  return _towerCache
+}
 
+let _creepCache: Creep[]
+function allCreeps() : Creep[] {
   if (_creepCache === undefined) {
     _creepCache = getObjectsByPrototype(Creep)
   }
+  return _creepCache
 }
 
 class PlayerInfo {
@@ -32,17 +38,15 @@ class PlayerInfo {
 type Ownable = Flag | StructureTower | Creep
 
 function fillPlayerInfo (whoFunction: (x: Ownable) => boolean) : PlayerInfo {
-  _fillCaches()
-
   const playerInfo = new PlayerInfo()
 
-  playerInfo.flag = _flagCache.find(x => whoFunction.apply(x))
+  playerInfo.flag = allFlags().find(x => whoFunction.apply(x))
 
-  const towers = _towerCache.filter(x => whoFunction.apply(x))
+  const towers = allTowers().filter(x => whoFunction.apply(x))
   if (towers.length > 0) playerInfo.tower1 = towers[0]
   if (towers.length > 1) playerInfo.tower2 = towers[1]
 
-  playerInfo.creeps = _creepCache.filter(x => whoFunction.apply(x))
+  playerInfo.creeps = allCreeps().filter(x => whoFunction.apply(x))
 
   return playerInfo
 }
