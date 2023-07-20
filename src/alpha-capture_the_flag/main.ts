@@ -1,12 +1,16 @@
 import { Direction, getDirection, getObjectsByPrototype, getTicks } from 'game/utils'
-import { Creep, Position, Structure, StructureTower } from 'game/prototypes'
+import { Creep, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
-import { MOVE, RESOURCE_ENERGY, TOWER_ENERGY_COST } from 'game/constants'
+import { ATTACK, MOVE, RESOURCE_ENERGY, TOWER_ENERGY_COST } from 'game/constants'
+
+function sortById(a: GameObject, b: GameObject) : number {
+  return a.id.toString().localeCompare(b.id.toString())
+}
 
 let _flagCache: Flag[]
 function allFlags(): Flag[] {
   if (_flagCache === undefined) {
-    _flagCache = getObjectsByPrototype(Flag)
+    _flagCache = getObjectsByPrototype(Flag).sort(sortById)
   }
   return _flagCache
 }
@@ -14,7 +18,7 @@ function allFlags(): Flag[] {
 let _towerCache: StructureTower[]
 function allTowers(): StructureTower[] {
   if (_towerCache === undefined) {
-    _towerCache = getObjectsByPrototype(StructureTower)
+    _towerCache = getObjectsByPrototype(StructureTower).sort(sortById)
   }
   return _towerCache
 }
@@ -22,7 +26,7 @@ function allTowers(): StructureTower[] {
 let _creepCache: Creep[]
 function allCreeps(): Creep[] {
   if (_creepCache === undefined) {
-    _creepCache = getObjectsByPrototype(Creep)
+    _creepCache = getObjectsByPrototype(Creep).sort(sortById)
   }
   return _creepCache
 }
@@ -31,18 +35,6 @@ class PlayerInfo {
   flag: Flag | undefined
   towers: StructureTower[] = []
   creeps: Creep[] = []
-}
-
-class FlagGoal {
-  flag: Flag | undefined
-  creep: Creep | undefined
-  pathfinding: boolean | undefined
-
-  constructor(_flag: Flag, _creep: Creep, _pathfidning: boolean) {
-    this.flag = _flag
-    this.creep = _creep
-    this.pathfinding = _pathfidning
-  }
 }
 
 type Ownable = Flag | StructureTower | Creep
@@ -57,9 +49,20 @@ function fillPlayerInfo(whoFunction: (x: Ownable) => boolean): PlayerInfo {
   return playerInfo
 }
 
+class FlagGoal {
+  creep: Creep
+  flag: Flag
+  pathfinding: boolean
+
+  constructor(creep: Creep, flag: Flag, pathfidning: boolean) {
+    this.creep = creep
+    this.flag = flag
+    this.pathfinding = pathfidning
+  }
+}
+
 let myPlayerInfo: PlayerInfo
 let enemyPlayerInfo: PlayerInfo
-
 let flagGoals: FlagGoal[]
 
 export function loop(): void {
@@ -78,9 +81,9 @@ export function loop(): void {
 
     for (const creep of myPlayerInfo.creeps) {
       if (creep.y === myPlayerInfo.flag.y) {
-        flagGoals.push(new FlagGoal(myPlayerInfo.flag, creep, false))
+        flagGoals.push(new FlagGoal(creep, myPlayerInfo.flag, false))
       } else {
-        flagGoals.push(new FlagGoal(enemyPlayerInfo.flag, creep, true))
+        flagGoals.push(new FlagGoal(creep, enemyPlayerInfo.flag, true))
       }
     }
   }
@@ -102,11 +105,15 @@ function operational(something?: StructureTower | Creep) : boolean {
 
 function hasActiveBodyPart(creep: Creep, type: string) : boolean {
   return creep.body.some(
-    function(value) : boolean {
-      return value.type === this && value.hits > 0
+    function(bodyPart) : boolean {
+      return bodyPart.hits > 0 && bodyPart.type === this
     }
     , type
   )
+}
+
+function notMaxHits(creep: Creep) : boolean {
+  return creep.hits < creep.hitsMax
 }
 
 function operateTower(tower: StructureTower): void {
@@ -155,18 +162,23 @@ function advanceFlagGoal(flagGoal: FlagGoal) {
 }
 
 type Attackable = Creep | Structure
-type Healable = Creep
 
 function autoMelee(creep: Creep, attackables: Attackable[]) {
+  if (!hasActiveBodyPart(creep, ATTACK)) return
+
+  let inRange = creep.findInRange(attackables, 1)
+  if (inRange.length > 0) {
+    creep.attack(inRange[0])
+  }
 }
 
 function autoRanged(creep: Creep, attackables: Attackable[]) {
 }
 
-function autoHeal(creep: Creep, healables: Healable[]) {
+function autoHeal(creep: Creep, healables: Creep[]) {
 }
 
-function autoAll(creep: Creep, attackables: Attackable[], healables: Healable[]) {
+function autoAll(creep: Creep, attackables: Attackable[], healables: Creep[]) {
   autoMelee(creep, attackables)
   autoRanged(creep, attackables)
   autoHeal(creep, healables)
@@ -177,15 +189,21 @@ function play(): void {
 
   myPlayerInfo.towers.filter(operational).forEach(operateTower)
 
-  let myCreeps = myPlayerInfo.creeps.filter(operational)
-
   let enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
   let enemyTowers = enemyPlayerInfo.towers.filter(operational)
   let enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
 
+  let myCreeps = myPlayerInfo.creeps.filter(operational)
+  let myHealableCreeps = myCreeps.filter(notMaxHits)
+
+  let context = {
+    enemyAttackables,
+    myHealableCreeps
+  }
+
   myCreeps.forEach(
-    function(creep, index, localMyCreeps) : void {
-      autoAll(creep, this, localMyCreeps)
-    }, enemyAttackables
+    function(creep) : void {
+      autoAll(creep, this.enemyAttackables, this.myHealableCreeps)
+    }, context
   )
 }
