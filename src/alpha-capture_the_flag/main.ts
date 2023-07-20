@@ -40,13 +40,13 @@ type Ownable = Flag | StructureTower | Creep
 function fillPlayerInfo (whoFunction: (x: Ownable) => boolean) : PlayerInfo {
   const playerInfo = new PlayerInfo()
 
-  playerInfo.flag = allFlags().find(x => whoFunction.apply(x))
+  playerInfo.flag = allFlags().find(whoFunction)
 
-  const towers = allTowers().filter(x => whoFunction.apply(x))
+  const towers = allTowers().filter(whoFunction)
   if (towers.length > 0) playerInfo.tower1 = towers[0]
   if (towers.length > 1) playerInfo.tower2 = towers[1]
 
-  playerInfo.creeps = allCreeps().filter(x => whoFunction.apply(x))
+  playerInfo.creeps = allCreeps().filter(whoFunction)
 
   return playerInfo
 }
