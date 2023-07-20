@@ -82,9 +82,14 @@ export function loop (): void {
     )
 
     for (const creep of myPlayerInfo.creeps) {
-      if (creep.y === myPlayerInfo.flag.y) {
-        flagGoals.push(new FlagGoal(creep, myPlayerInfo.flag, false))
-      } else {
+      if (myPlayerInfo.flag) {
+        if (myPlayerInfo.flag.y === creep.y) {
+          flagGoals.push(new FlagGoal(creep, myPlayerInfo.flag, false))
+          continue
+        }
+      }
+
+      if (enemyPlayerInfo.flag) {
         flagGoals.push(new FlagGoal(creep, enemyPlayerInfo.flag, true))
       }
     }
