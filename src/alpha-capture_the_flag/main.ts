@@ -2,6 +2,7 @@ import { Direction, getDirection, getObjectsByPrototype, getRange, getTicks } fr
 import { Creep, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 import { ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST } from 'game/constants'
+import { Visual } from 'game/visual'
 
 function sortById(a: GameObject, b: GameObject) : number {
   return a.id.toString().localeCompare(b.id.toString())
@@ -168,7 +169,9 @@ function autoMelee(creep: Creep, attackables: Attackable[]) {
 
   let inRange = creep.findInRange(attackables, 1)
   if (inRange.length > 0) {
-    creep.attack(inRange[0])
+    let target = inRange[0]
+    creep.attack(target)
+    new Visual().line(creep, target)
   }
 }
 
@@ -207,7 +210,9 @@ function autoRanged(creep: Creep, attackables: Attackable[]) {
   if (totalMassAttackPower >= RANGED_ATTACK_POWER) {
     creep.rangedMassAttack()
   } else {
-    creep.rangedAttack(inRange[0].attackable)
+    let target = inRange[0].attackable
+    creep.rangedAttack(target)
+    new Visual().line(creep, target)
   }
 }
 
@@ -241,7 +246,9 @@ function autoHeal(creep: Creep, healables: Creep[]) {
   if (inTouch !== undefined) {
     creep.heal(inTouch.attackable as Creep)
   } else {
-    creep.rangedHeal(inRange[0].attackable as Creep)
+    let target = inRange[0].attackable as Creep
+    creep.rangedHeal(target)
+    new Visual().line(creep, target)
   }
 }
 
