@@ -1,7 +1,7 @@
 import { Direction, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Creep, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
-import { ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_RANGE } from 'game/constants'
+import { ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_POWER_ATTACK, TOWER_POWER_HEAL, TOWER_RANGE } from 'game/constants'
 import { Visual } from 'game/visual'
 
 function sortById (a: GameObject, b: GameObject) : number {
@@ -132,12 +132,41 @@ class AttackableAndRange {
   }
 }
 
+function towerSomethingPower(startAmount: number, startRange: number) : number {
+  let amount = startAmount
+  let range = startRange
+
+  if(range > TOWER_OPTIMAL_RANGE) {
+      if(range > TOWER_FALLOFF_RANGE) range = TOWER_FALLOFF_RANGE
+      amount -= amount * TOWER_FALLOFF * (range - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE)
+      amount = Math.floor(amount)
+  }
+
+  return amount
+}
+
+function towerAttackPower(target: AttackableAndRange) : number {
+  return towerSomethingPower(TOWER_POWER_ATTACK, target.range)
+}
+
+function towerHealPower(target: AttackableAndRange) : number {
+  return towerSomethingPower(TOWER_POWER_HEAL, target.range)
+}
+
 function operateTower (tower: StructureTower): void {
   if (tower.cooldown > 0) return
   if (tower.store.getUsedCapacity(RESOURCE_ENERGY) < TOWER_ENERGY_COST) return
 
+  const wasteful = tower.store.getFreeCapacity(RESOURCE_ENERGY) < TOWER_ENERGY_COST
+
   let allCreepsInRange = allCreeps()
   .filter(operational)
+  .filter(
+    function (creep: Creep) : boolean {
+      if (creep.my) return notMaxHits(creep)
+      return true
+    }
+  )
   .map(
     function (creep: Creep) : AttackableAndRange {
       let range = getRange(this, creep)
@@ -153,7 +182,12 @@ function operateTower (tower: StructureTower): void {
 
   if (allCreepsInRange.length === 0) return
 
-
+  const target = allCreepsInRange[0].attackable as Creep
+  if (target.my) {
+    tower.heal(target)
+  } else {
+    tower.attack(target)
+  }
 }
 
 function atSamePosition (a: Position, b: Position) : boolean {
