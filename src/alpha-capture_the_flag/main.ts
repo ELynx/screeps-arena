@@ -120,14 +120,14 @@ function notMaxHits (creep: Creep) : boolean {
   return creep.hits < creep.hitsMax
 }
 
-function towerSomethingPower(startAmount: number, startRange: number) : number {
+function towerSomethingPower (startAmount: number, startRange: number) : number {
   let amount = startAmount
   let range = startRange
 
-  if(range > TOWER_OPTIMAL_RANGE) {
-      if(range > TOWER_FALLOFF_RANGE) range = TOWER_FALLOFF_RANGE
-      amount -= amount * TOWER_FALLOFF * (range - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE)
-      amount = Math.floor(amount)
+  if (range > TOWER_OPTIMAL_RANGE) {
+    if (range > TOWER_FALLOFF_RANGE) range = TOWER_FALLOFF_RANGE
+    amount -= amount * TOWER_FALLOFF * (range - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE)
+    amount = Math.floor(amount)
   }
 
   return amount
@@ -181,31 +181,31 @@ function operateTower (tower: StructureTower): void {
 
   const saveEnergy = tower.store.getFreeCapacity(RESOURCE_ENERGY) > TOWER_ENERGY_COST
 
-  let allCreepsInRange = allCreeps()
-  .filter(operational)
-  .filter(
-    function (creep: Creep) : boolean {
-      if (creep.my) return notMaxHits(creep)
-      return true
-    }
-  )
-  .map(
-    function (creep: Creep) : StructureTowerScore {
-      let range = getRange(this, creep)
-      return new StructureTowerScore(creep, range)
-    }
-    , tower
-  )
-  .filter(
-    function (target: StructureTowerScore) : boolean {
-      return target.range <= TOWER_RANGE
-    }
-  )
-  .sort(
-    function (a: StructureTowerScore, b: StructureTowerScore) : number {
-      return b.score - a.score
-    }
-  )
+  const allCreepsInRange = allCreeps()
+    .filter(operational)
+    .filter(
+      function (creep: Creep) : boolean {
+        if (creep.my) return notMaxHits(creep)
+        return true
+      }
+    )
+    .map(
+      function (creep: Creep) : StructureTowerScore {
+        const range = getRange(this, creep)
+        return new StructureTowerScore(creep, range)
+      }
+      , tower
+    )
+    .filter(
+      function (target: StructureTowerScore) : boolean {
+        return target.range <= TOWER_RANGE
+      }
+    )
+    .sort(
+      function (a: StructureTowerScore, b: StructureTowerScore) : number {
+        return b.score - a.score
+      }
+    )
 
   if (allCreepsInRange.length === 0) return
 
