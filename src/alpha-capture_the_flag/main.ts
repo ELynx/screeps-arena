@@ -120,15 +120,19 @@ function notMaxHits (creep: Creep) : boolean {
   return creep.hits < creep.hitsMax
 }
 
-type Attackable = Creep | Structure
-
-class AttackableAndRange {
-  attackable: Attackable
+class StructureTowerScore {
+  creep: Creep
   range: number
+  score: number
 
-  constructor (attackable: Attackable, range: number) {
-    this.attackable = attackable
+  constructor (creep: Creep, range: number) {
+    this.creep = creep
     this.range = range
+    this.score = this.calculateScore()
+  }
+
+  private calculateScore () : number {
+    return 0
   }
 }
 
@@ -145,11 +149,11 @@ function towerSomethingPower(startAmount: number, startRange: number) : number {
   return amount
 }
 
-function towerAttackPower(target: AttackableAndRange) : number {
+function towerAttackPower(target: StructureTowerScore) : number {
   return towerSomethingPower(TOWER_POWER_ATTACK, target.range)
 }
 
-function towerHealPower(target: AttackableAndRange) : number {
+function towerHealPower(target: StructureTowerScore) : number {
   return towerSomethingPower(TOWER_POWER_HEAL, target.range)
 }
 
@@ -168,21 +172,21 @@ function operateTower (tower: StructureTower): void {
     }
   )
   .map(
-    function (creep: Creep) : AttackableAndRange {
+    function (creep: Creep) : StructureTowerScore {
       let range = getRange(this, creep)
-      return new AttackableAndRange(creep, range)
+      return new StructureTowerScore(creep, range)
     }
     , tower
   )
   .filter(
-    function (target: AttackableAndRange) : boolean {
+    function (target: StructureTowerScore) : boolean {
       return target.range <= TOWER_RANGE
     }
   )
 
   if (allCreepsInRange.length === 0) return
 
-  const target = allCreepsInRange[0].attackable as Creep
+  const target = allCreepsInRange[0].creep
   if (target.my) {
     tower.heal(target)
   } else {
@@ -225,6 +229,18 @@ function advanceFlagGoal (flagGoal: FlagGoal) {
     toFlagYesPathfinding(flagGoal.creep, flagGoal.flag)
   } else {
     toFlagNoPathfinding(flagGoal.creep, flagGoal.flag)
+  }
+}
+
+type Attackable = Creep | Structure
+
+class AttackableAndRange {
+  attackable: Attackable
+  range: number
+
+  constructor (attackable: Attackable, range: number) {
+    this.attackable = attackable
+    this.range = range
   }
 }
 
