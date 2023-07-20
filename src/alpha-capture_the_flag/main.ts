@@ -52,13 +52,13 @@ export function loop () {
   if (getTicks() === 1) {
     myPlayerInfo = fillPlayerInfo(
       function my (what: Flag | StructureTower | Creep) : boolean {
-        return what.my
+        return what.my === true
       }
     )
 
     enemyPlayerInfo = fillPlayerInfo(
       function enemy (what: Flag | StructureTower | Creep) : boolean {
-        return !what.my
+        return what.my === false
       }
     )
   }
