@@ -94,7 +94,7 @@ export function loop (): void {
       }
     }
 
-    engageDistance = getRange(myPlayerInfo.flag, enemyPlayerInfo.flag)
+    engageDistance = getRange(myPlayerInfo.flag as Position, enemyPlayerInfo.flag as Position)
   }
 
   play()
@@ -196,7 +196,7 @@ function operateTower (tower: StructureTower): void {
     )
     .map(
       function (creep: Creep) : StructureTowerScore {
-        const range = getRange(this, creep)
+        const range = getRange(this as Position, creep as Position)
         return new StructureTowerScore(creep, range)
       }
       , tower
@@ -281,7 +281,7 @@ function autoMelee (creep: Creep, attackables: Attackable[]) {
   if (inRange.length > 0) {
     const target = inRange[0]
     creep.attack(target)
-    new Visual().line(creep, target)
+    new Visual().line(creep as Position, target as Position)
   }
 }
 
@@ -294,7 +294,7 @@ function autoRanged (creep: Creep, attackables: Attackable[]) {
 
   const inRange = attackables.map(
     function (target: Attackable) : AttackableAndRange {
-      const range = getRange(this, target)
+      const range = getRange(this as Position, target as Position)
       return new AttackableAndRange(target, range)
     }, creep
   ).filter(
@@ -312,7 +312,7 @@ function autoRanged (creep: Creep, attackables: Attackable[]) {
   } else {
     const target = inRange[0].attackable
     creep.rangedAttack(target)
-    new Visual().line(creep, target)
+    new Visual().line(creep as Position, target as Position)
   }
 }
 
@@ -326,7 +326,7 @@ function autoHeal (creep: Creep, healables: Creep[]) {
 
   const inRange = healables.map(
     function (target: Creep) : AttackableAndRange {
-      const range = getRange(this, target)
+      const range = getRange(this as Position, target as Position)
       return new AttackableAndRange(target, range)
     }, creep
   ).filter(
@@ -348,7 +348,7 @@ function autoHeal (creep: Creep, healables: Creep[]) {
   } else {
     const target = inRange[0].attackable as Creep
     creep.rangedHeal(target)
-    new Visual().line(creep, target)
+    new Visual().line(creep as Position, target as Position)
   }
 }
 
