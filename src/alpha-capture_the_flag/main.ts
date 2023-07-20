@@ -1,7 +1,7 @@
 import { Direction, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Creep, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
-import { ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST } from 'game/constants'
+import { ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_RANGE } from 'game/constants'
 import { Visual } from 'game/visual'
 
 function sortById (a: GameObject, b: GameObject) : number {
@@ -65,6 +65,7 @@ class FlagGoal {
 let myPlayerInfo: PlayerInfo
 let enemyPlayerInfo: PlayerInfo
 let flagGoals: FlagGoal[]
+let engageDistance: number
 
 export function loop (): void {
   if (getTicks() === 1) {
@@ -87,6 +88,8 @@ export function loop (): void {
         flagGoals.push(new FlagGoal(creep, enemyPlayerInfo.flag, true))
       }
     }
+
+    engageDistance = getRange(myPlayerInfo.flag, enemyPlayerInfo.flag)
   }
 
   play()
@@ -133,7 +136,24 @@ function operateTower (tower: StructureTower): void {
   if (tower.cooldown > 0) return
   if (tower.store.getUsedCapacity(RESOURCE_ENERGY) < TOWER_ENERGY_COST) return
 
-  // TODO
+  let allCreepsInRange = allCreeps()
+  .filter(operational)
+  .map(
+    function (creep: Creep) : AttackableAndRange {
+      let range = getRange(this, creep)
+      return new AttackableAndRange(creep, range)
+    }
+    , tower
+  )
+  .filter(
+    function (target: AttackableAndRange) : boolean {
+      return target.range <= TOWER_RANGE
+    }
+  )
+
+  if (allCreepsInRange.length === 0) return
+
+
 }
 
 function atSamePosition (a: Position, b: Position) : boolean {
@@ -173,8 +193,6 @@ function advanceFlagGoal (flagGoal: FlagGoal) {
     toFlagNoPathfinding(flagGoal.creep, flagGoal.flag)
   }
 }
-
-
 
 function autoMelee (creep: Creep, attackables: Attackable[]) {
   if (!hasActiveBodyPart(creep, ATTACK)) return
@@ -263,23 +281,31 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
 function play (): void {
   flagGoals.forEach(advanceFlagGoal)
 
-  myPlayerInfo.towers.filter(operational).forEach(operateTower)
+  const ticks = getTicks()
 
-  const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
-  const enemyTowers = enemyPlayerInfo.towers.filter(operational)
-  const enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
-
-  const myCreeps = myPlayerInfo.creeps.filter(operational)
-  const myHealableCreeps = myCreeps.filter(notMaxHits)
-
-  const context = {
-    enemyAttackables,
-    myHealableCreeps
+  // to not waste time before any meaningful work for towers is possible
+  if (ticks > (engageDistance / 2 - 5)) {
+    myPlayerInfo.towers.filter(operational).forEach(operateTower)
   }
 
-  myCreeps.forEach(
-    function (creep) : void {
-      autoAll(creep, this.enemyAttackables, this.myHealableCreeps)
-    }, context
-  )
+  // to not waste time before any meaningful work for creeps is possible
+  if (ticks > (engageDistance / 3 - 5)) {
+    const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
+    const enemyTowers = enemyPlayerInfo.towers.filter(operational)
+    const enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
+
+    const myCreeps = myPlayerInfo.creeps.filter(operational)
+    const myHealableCreeps = myCreeps.filter(notMaxHits)
+
+    const context = {
+      enemyAttackables,
+      myHealableCreeps
+    }
+
+    myCreeps.forEach(
+      function (creep) : void {
+        autoAll(creep, this.enemyAttackables, this.myHealableCreeps)
+      }, context
+    )
+  }
 }
