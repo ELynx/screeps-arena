@@ -32,11 +32,11 @@ class PlayerInfo {
 function fillPlayerInfo (whoFunction: Function) : PlayerInfo {
   _fillCaches()
 
-  let playerInfo = new PlayerInfo
+  const playerInfo = new PlayerInfo()
 
   playerInfo.flag = _flagCache.find(x => whoFunction.apply(x))
-  
-  let towers = _towerCache.filter(x => whoFunction.apply(x))
+
+  const towers = _towerCache.filter(x => whoFunction.apply(x))
   if (towers.length > 0) playerInfo.tower1 = towers[0]
   if (towers.length > 1) playerInfo.tower2 = towers[1]
 
@@ -51,13 +51,13 @@ let enemyPlayerInfo : PlayerInfo
 export function loop () {
   if (getTicks() === 1) {
     myPlayerInfo = fillPlayerInfo(
-      function my(what: Flag | StructureTower | Creep) : boolean {
+      function my (what: Flag | StructureTower | Creep) : boolean {
         return what.my
       }
     )
 
     enemyPlayerInfo = fillPlayerInfo(
-      function enemy(what: Flag | StructureTower | Creep) : boolean {
+      function enemy (what: Flag | StructureTower | Creep) : boolean {
         return !what.my
       }
     )
