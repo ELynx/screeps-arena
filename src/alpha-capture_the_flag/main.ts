@@ -9,7 +9,7 @@ function sortById (a: GameObject, b: GameObject) : number {
 }
 
 let _flagCache: Flag[]
-function allFlags (): Flag[] {
+function allFlags () : Flag[] {
   if (_flagCache === undefined) {
     _flagCache = getObjectsByPrototype(Flag).sort(sortById)
   }
@@ -17,7 +17,7 @@ function allFlags (): Flag[] {
 }
 
 let _towerCache: StructureTower[]
-function allTowers (): StructureTower[] {
+function allTowers () : StructureTower[] {
   if (_towerCache === undefined) {
     _towerCache = getObjectsByPrototype(StructureTower).sort(sortById)
   }
@@ -25,7 +25,7 @@ function allTowers (): StructureTower[] {
 }
 
 let _creepCache: Creep[]
-function allCreeps (): Creep[] {
+function allCreeps () : Creep[] {
   if (_creepCache === undefined) {
     _creepCache = getObjectsByPrototype(Creep).sort(sortById)
   }
@@ -50,45 +50,22 @@ function fillPlayerInfo (whoFunction: (x: Ownable) => boolean) : PlayerInfo {
   return playerInfo
 }
 
-class PositionGoal {
-  creep: Creep
-  position: Position
-
-  constructor (creep: Creep, position: Position) {
-    this.creep = creep
-    this.position = position
-  }
-}
-
 let myPlayerInfo: PlayerInfo
 let enemyPlayerInfo: PlayerInfo
 
-let positionGoals: PositionGoal[] = []
-
-export function loop (): void {
+export function loop () : void {
   if (getTicks() === 1) {
     myPlayerInfo = fillPlayerInfo(
-      function my (what: Ownable): boolean {
+      function my (what: Ownable) : boolean {
         return what.my === true
       }
     )
 
     enemyPlayerInfo = fillPlayerInfo(
-      function enemy (what: Ownable): boolean {
+      function enemy (what: Ownable) : boolean {
         return what.my === false
       }
     )
-
-    for (const creep of myPlayerInfo.creeps) {
-      if (myPlayerInfo.flag && myPlayerInfo.flag.y === creep.y) {
-        positionGoals.push(new PositionGoal(creep, myPlayerInfo.flag as Position))
-        continue
-      }
-
-      if (enemyPlayerInfo.flag) {
-        positionGoals.push(new PositionGoal(creep, enemyPlayerInfo.flag as Position))
-      }
-    }
   }
 
   play()
@@ -116,6 +93,19 @@ function hasActiveBodyPart (creep: Creep, type: string) : boolean {
 
 function notMaxHits (creep: Creep) : boolean {
   return creep.hits < creep.hitsMax
+}
+
+function atSamePosition (a: Position, b: Position) : boolean {
+  return a.x === b.x && a.y === b.y
+}
+
+function getDirectionByPosition (from: Position, to: Position) : Direction | undefined {
+  if (atSamePosition(from, to)) return undefined
+
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+
+  return getDirection(dx, dy)
 }
 
 function towerPower (fullAmount: number, range: number) : number {
@@ -169,7 +159,7 @@ class StructureTowerScore {
   }
 }
 
-function operateTower (tower: StructureTower): void {
+function operateTower (tower: StructureTower) : void {
   if (tower.cooldown > 0) return
   if ((tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return
 
@@ -214,27 +204,6 @@ function operateTower (tower: StructureTower): void {
   } else {
     tower.attack(target.creep)
   }
-}
-
-function atSamePosition (a: Position, b: Position) : boolean {
-  return a.x === b.x && a.y === b.y
-}
-
-function getDirectionByPosition (from: Position, to: Position) : Direction | undefined {
-  if (atSamePosition(from, to)) return undefined
-
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-
-  return getDirection(dx, dy)
-}
-
-function advancePositionGoal (positionGoal: PositionGoal) {
-  if (!operational(positionGoal.creep)) return
-  if (positionGoal.creep.fatigue > 0) return
-  if (!hasActiveBodyPart(positionGoal.creep, MOVE)) return
-
-  positionGoal.creep.moveTo(positionGoal.position)
 }
 
 type Attackable = Creep | Structure
@@ -333,6 +302,42 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   autoHeal(creep, healables)
 }
 
+function autoCombat () {
+  myPlayerInfo.towers.filter(operational).forEach(operateTower)
+
+  const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
+  const enemyTowers = enemyPlayerInfo.towers.filter(operational)
+  const enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
+
+  const myCreeps = myPlayerInfo.creeps.filter(operational)
+  const myHealableCreeps = myCreeps.filter(notMaxHits)
+
+  myCreeps.forEach(
+    function (creep) : void {
+      autoAll(creep, enemyAttackables, myHealableCreeps)
+    }
+  )
+}
+
+class PositionGoal {
+  creep: Creep
+  position: Position
+
+  constructor (creep: Creep, position: Position) {
+    this.creep = creep
+    this.position = position
+  }
+}
+
+function advancePositionGoal (positionGoal: PositionGoal) {
+  if (!operational(positionGoal.creep)) return
+  if (positionGoal.creep.fatigue > 0) return
+  if (atSamePosition(positionGoal.creep as Position, positionGoal.position)) return
+  if (!hasActiveBodyPart(positionGoal.creep, MOVE)) return
+
+  positionGoal.creep.moveTo(positionGoal.position)
+}
+
 class PositionStatistics {
   numberOfCreeps: number
 
@@ -357,6 +362,7 @@ class PositionStatistics {
     const ticksNow = getTicks()
     const ticksRemaining = ticksLimit - ticksNow
 
+    // for median
     const sorted = ranges.sort()
 
     let total = 0
@@ -390,24 +396,28 @@ function calculatePositionStatisticsForFlag (creeps: Creep[], flag?: Flag) : Pos
   return calculatePositionStatistics(creeps, flag! as Position)
 }
 
-function play (): void {
-  positionGoals.forEach(advancePositionGoal)
+let defendMyFlag : PositionGoal[] = []
+let rushEnemyFlag : PositionGoal[] = []
+
+function play () : void {
+  if (getTicks() === 1) {
+    for (const creep of myPlayerInfo.creeps) {
+      if (myPlayerInfo.flag && myPlayerInfo.flag.y === creep.y) {
+        defendMyFlag.push(new PositionGoal(creep, myPlayerInfo.flag as Position))
+        continue
+      }
+
+      if (enemyPlayerInfo.flag) {
+        rushEnemyFlag.push(new PositionGoal(creep, enemyPlayerInfo.flag as Position))
+      }
+    }
+  }
 
   const myAdvance = calculatePositionStatisticsForFlag(myPlayerInfo.creeps, enemyPlayerInfo.flag)
   const enemyAdvance = calculatePositionStatisticsForFlag(enemyPlayerInfo.creeps, myPlayerInfo.flag)
 
-  myPlayerInfo.towers.filter(operational).forEach(operateTower)
+  defendMyFlag.forEach(advancePositionGoal)
+  rushEnemyFlag.forEach(advancePositionGoal)
 
-  const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
-  const enemyTowers = enemyPlayerInfo.towers.filter(operational)
-  const enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
-
-  const myCreeps = myPlayerInfo.creeps.filter(operational)
-  const myHealableCreeps = myCreeps.filter(notMaxHits)
-
-  myCreeps.forEach(
-    function (creep) : void {
-      autoAll(creep, enemyAttackables, myHealableCreeps)
-    }
-  )
+  autoCombat()
 }
