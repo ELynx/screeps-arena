@@ -197,10 +197,9 @@ function operateTower (tower: StructureTower): void {
     )
     .map(
       function (creep: Creep) : StructureTowerScore {
-        const range = getRange(this as Position, creep as Position)
+        const range = getRange(tower as Position, creep as Position)
         return new StructureTowerScore(creep, range)
       }
-      , tower
     )
     .filter(
       function (target: StructureTowerScore) : boolean {
