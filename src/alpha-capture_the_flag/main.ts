@@ -1,5 +1,5 @@
 import { Creep, CreepMoveResult, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
-import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED } from 'game/constants'
+import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS } from 'game/constants'
 import { Direction, FindPathOptions, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Visual } from 'game/visual'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
@@ -334,17 +334,50 @@ class CreepLine {
   }
 
   moveTo (target: Position, options?: FindPathOptions) {
-    let [rc, head] = this.chaseHead()
+    let [rc, head] = this.chaseHead(options)
     if (rc !== OK) return rc
 
     return head.moveTo(target, options)
   }
 
-  private chaseHead () : [CreepMoveResult, Creep] {
+  headPosition () : Position | undefined {
+    this.refreshState()
+    if (this.creeps.length === 0) return undefined
+    return this.creeps[this.creeps.length - 1] as Position
+  }
+
+  private chaseHead (options?: FindPathOptions) : [CreepMoveResult, Creep] {
     const state = this.refreshState()
     if (state != OK) return [state, undefined]
 
-    
+    // all !operational creeps are removed
+    // all creeps can move
+
+    // simple case
+    if (this.creeps.length === 1) return [OK, this.creeps[0]]
+
+    for (let i = 0; i < this.creeps.length - 1; ++i) {
+      const creep = this.creeps[i]
+      const next = this.creeps[i + 1]
+
+      const range = getRange(creep as Position, next as Position)
+
+      if (range === 1) {
+        // just a step
+        const direction = getDirectionByPosition(creep as Position, next as Position)
+        creep.move(direction)
+      } else if (range > 1) {
+        creep.moveTo(next as Position, options)
+        // give time to catch up
+        return [ERR_TIRED, undefined]
+      } else {
+        // just to cover the case
+        return [ERR_INVALID_ARGS, undefined]
+      }
+
+      // give head for command
+      return [OK, this.creeps[this.creeps.length - 1]]
+    }
   }
 
   private refreshState () : CreepMoveResult {
@@ -361,22 +394,20 @@ class CreepLine {
 }
 
 class PositionGoal {
-  creep: Creep
+  creepLine: CreepLine
   position: Position
 
-  constructor (creep: Creep, position: Position) {
-    this.creep = creep
+  constructor (creeps: Creep[], position: Position) {
+    this.creepLine = new CreepLine(creeps)
     this.position = position
   }
 }
 
 function advancePositionGoal (positionGoal: PositionGoal) {
-  if (!operational(positionGoal.creep)) return
-  if (atSamePosition(positionGoal.creep as Position, positionGoal.position)) return
-  if (positionGoal.creep.fatigue > 0) return
-  if (!hasActiveBodyPart(positionGoal.creep, MOVE)) return
+  let headPosition = positionGoal.creepLine.headPosition()
+  if (headPosition === undefined) return
 
-  positionGoal.creep.moveTo(positionGoal.position)
+  positionGoal.creepLine.moveTo(positionGoal.position)
 }
 
 function defineGoalsFromAscii (base: Position, creeps: Creep[], ascii: string[][]) : [PositionGoal[], Creep[]] {
@@ -385,7 +416,7 @@ function defineGoalsFromAscii (base: Position, creeps: Creep[], ascii: string[][
 
   for (let creep of creeps) {
     if (creep.y === base.y) {
-      goals.push(new PositionGoal(creep, base))
+      goals.push(new PositionGoal([creep], base))
     } else {
       unusedCreeps.push(creep)
     }
@@ -471,12 +502,10 @@ function play () : void {
     }
 
     if (enemyPlayerInfo.flag) {
-      for (let creep of scouts) {
-        scout.push(new PositionGoal(creep, enemyPlayerInfo.flag as Position))
-      }
+      scout.push(new PositionGoal(scouts, enemyPlayerInfo.flag as Position))
 
       for (let creep of myPlayerInfo.creeps) {
-        rushEnemyFlag.push(new PositionGoal(creep, enemyPlayerInfo.flag as Position))
+        rushEnemyFlag.push(new PositionGoal([creep], enemyPlayerInfo.flag as Position))
       }
     }
   }
