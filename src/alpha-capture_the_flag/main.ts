@@ -115,8 +115,7 @@ function operational (something?: StructureTower | Creep) : boolean {
 function hasActiveBodyPart (creep: Creep, type: string) : boolean {
   return creep.body.some(
     function (bodyPart) : boolean {
-      const typed = this as string
-      return bodyPart.hits > 0 && bodyPart.type === typed
+      return bodyPart.hits > 0 && bodyPart.type === type
     }
     , type
   )
