@@ -377,15 +377,10 @@ function play (): void {
     const myCreeps = myPlayerInfo.creeps.filter(operational)
     const myHealableCreeps = myCreeps.filter(notMaxHits)
 
-    const context = {
-      enemyAttackables,
-      myHealableCreeps
-    }
-
     myCreeps.forEach(
       function (creep) : void {
-        autoAll(creep, this.enemyAttackables, this.myHealableCreeps)
-      }, context
+        autoAll(creep, enemyAttackables, myHealableCreeps)
+      }
     )
   }
 }
