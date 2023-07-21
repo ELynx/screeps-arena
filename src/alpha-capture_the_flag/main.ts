@@ -203,7 +203,11 @@ function operateTower (tower: StructureTower): void {
     )
     .filter(
       function (target: StructureTowerScore) : boolean {
-        return target.range <= TOWER_RANGE
+        if (target.creep.my) {
+          return target.range <= TOWER_OPTIMAL_RANGE * 3
+        } else {
+          return target.range <= TOWER_OPTIMAL_RANGE * 2
+        }
       }
     )
     .sort(
