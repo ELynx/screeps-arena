@@ -294,9 +294,9 @@ function autoRanged (creep: Creep, attackables: Attackable[]) {
 
   const inRange = attackables.map(
     function (target: Attackable) : AttackableAndRange {
-      const range = getRange(this as Position, target as Position)
+      const range = getRange(creep as Position, target as Position)
       return new AttackableAndRange(target, range)
-    }, creep
+    }
   ).filter(
     function (target: AttackableAndRange) : boolean {
       return target.range <= 3
@@ -326,9 +326,9 @@ function autoHeal (creep: Creep, healables: Creep[]) {
 
   const inRange = healables.map(
     function (target: Creep) : AttackableAndRange {
-      const range = getRange(this as Position, target as Position)
+      const range = getRange(creep as Position, target as Position)
       return new AttackableAndRange(target, range)
-    }, creep
+    }
   ).filter(
     function (target: AttackableAndRange) : boolean {
       return target.range <= 3
