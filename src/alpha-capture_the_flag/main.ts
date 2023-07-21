@@ -330,14 +330,14 @@ class CreepLine {
     const [rc, head] = this.chaseHead()
     if (rc !== OK) return rc
 
-    return head.move(direction)
+    return head!.move(direction)
   }
 
   moveTo (target: Position, options?: FindPathOptions) {
     const [rc, head] = this.chaseHead(options)
     if (rc !== OK) return rc
 
-    return head.moveTo(target, options)
+    return head!.moveTo(target, options)
   }
 
   headPosition () : Position | undefined {
@@ -346,7 +346,7 @@ class CreepLine {
     return this.creeps[this.creeps.length - 1] as Position
   }
 
-  private chaseHead (options?: FindPathOptions) : [CreepMoveResult, Creep] {
+  private chaseHead (options?: FindPathOptions) : [CreepMoveResult, Creep?] {
     const state = this.refreshState()
     if (state !== OK) return [state, undefined]
 
