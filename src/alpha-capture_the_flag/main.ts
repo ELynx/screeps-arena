@@ -365,7 +365,7 @@ class CreepLine {
       if (range === 1) {
         // just a step
         const direction = getDirectionByPosition(creep as Position, next as Position)
-        creep.move(direction)
+        creep.move(direction!) // because range 1 should work
       } else if (range > 1) {
         creep.moveTo(next as Position, options)
         // give time to catch up
