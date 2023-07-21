@@ -327,14 +327,14 @@ class CreepLine {
   }
 
   move (direction: Direction) : CreepMoveResult {
-    let [rc, head] = this.chaseHead()
+    const [rc, head] = this.chaseHead()
     if (rc !== OK) return rc
 
     return head.move(direction)
   }
 
   moveTo (target: Position, options?: FindPathOptions) {
-    let [rc, head] = this.chaseHead(options)
+    const [rc, head] = this.chaseHead(options)
     if (rc !== OK) return rc
 
     return head.moveTo(target, options)
@@ -384,7 +384,7 @@ class CreepLine {
     this.creeps = this.creeps.filter(operational)
     if (this.creeps.length === 0) return ERR_NO_BODYPART
 
-    for (let creep of this.creeps) {
+    for (const creep of this.creeps) {
       if (creep.fatigue > 0) return ERR_TIRED
       if (!hasActiveBodyPart(creep, MOVE)) return ERR_NO_BODYPART
     }
@@ -404,17 +404,17 @@ class PositionGoal {
 }
 
 function advancePositionGoal (positionGoal: PositionGoal) {
-  let headPosition = positionGoal.creepLine.headPosition()
+  const headPosition = positionGoal.creepLine.headPosition()
   if (headPosition === undefined) return
 
   positionGoal.creepLine.moveTo(positionGoal.position)
 }
 
 function defineGoalsFromAscii (base: Position, creeps: Creep[], ascii: string[][]) : [PositionGoal[], Creep[]] {
-  let goals : PositionGoal[] = []
-  let unusedCreeps : Creep[] = []
+  const goals : PositionGoal[] = []
+  const unusedCreeps : Creep[] = []
 
-  for (let creep of creeps) {
+  for (const creep of creeps) {
     if (creep.y === base.y) {
       goals.push(new PositionGoal([creep], base))
     } else {
@@ -453,7 +453,7 @@ class PositionStatistics {
     const sorted = ranges.sort()
 
     let total = 0
-    for (let x of sorted) {
+    for (const x of sorted) {
       if (x < this.min) this.min = x
       if (x > this.max) this.max = x
 
@@ -467,7 +467,7 @@ class PositionStatistics {
   }
 
   toString () : string {
-    return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] avg [${this.average}] mdn [${this.median}] reach [${this.canReach}] `;
+    return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] avg [${this.average}] mdn [${this.median}] reach [${this.canReach}] `
   }
 }
 
@@ -488,8 +488,8 @@ function calculatePositionStatisticsForFlag (creeps: Creep[], flag?: Flag) : Pos
 }
 
 let defendMyFlag : PositionGoal[]
-let scout : PositionGoal[] = []
-let rushEnemyFlag : PositionGoal[] = []
+const scout : PositionGoal[] = []
+const rushEnemyFlag : PositionGoal[] = []
 
 function play () : void {
   if (getTicks() === 1) {
@@ -504,7 +504,7 @@ function play () : void {
     if (enemyPlayerInfo.flag) {
       scout.push(new PositionGoal(scouts, enemyPlayerInfo.flag as Position))
 
-      for (let creep of myPlayerInfo.creeps) {
+      for (const creep of myPlayerInfo.creeps) {
         rushEnemyFlag.push(new PositionGoal([creep], enemyPlayerInfo.flag as Position))
       }
     }
