@@ -338,6 +338,21 @@ function advancePositionGoal (positionGoal: PositionGoal) {
   positionGoal.creep.moveTo(positionGoal.position)
 }
 
+function defineGoalsFromAscii (base: Position, creeps: Creep[], ascii: string[][]) : [PositionGoal[], Creep[]] {
+  let goals : PositionGoal[] = []
+  let unusedCreeps : Creep[] = []
+
+  for (let creep of creeps) {
+    if (creep.y === base.y) {
+      goals.push(new PositionGoal(creep, base))
+    } else {
+      unusedCreeps.push(creep)
+    }
+  }
+
+  return [goals, unusedCreeps]
+}
+
 class PositionStatistics {
   numberOfCreeps: number
 
@@ -400,30 +415,47 @@ function calculatePositionStatisticsForFlag (creeps: Creep[], flag?: Flag) : Pos
   return calculatePositionStatistics(creeps, flag! as Position)
 }
 
-let defendMyFlag : PositionGoal[] = []
+let defendMyFlag : PositionGoal[]
+let scout : PositionGoal[] = []
 let rushEnemyFlag : PositionGoal[] = []
 
 function play () : void {
   if (getTicks() === 1) {
-    for (const creep of myPlayerInfo.creeps) {
-      if (myPlayerInfo.flag && myPlayerInfo.flag.y === creep.y) {
-        defendMyFlag.push(new PositionGoal(creep, myPlayerInfo.flag as Position))
-        continue
+    let scouts : Creep[]
+
+    if (myPlayerInfo.flag) {
+      [defendMyFlag, scouts] = defineGoalsFromAscii(myPlayerInfo.flag as Position, myPlayerInfo.creeps, [['TODO']])
+    } else {
+      scouts = myPlayerInfo.creeps
+    }
+
+    if (enemyPlayerInfo.flag) {
+      for (let creep of scouts) {
+        scout.push(new PositionGoal(creep, enemyPlayerInfo.flag as Position))
       }
 
-      if (enemyPlayerInfo.flag) {
+      for (let creep of myPlayerInfo.creeps) {
         rushEnemyFlag.push(new PositionGoal(creep, enemyPlayerInfo.flag as Position))
       }
     }
   }
 
-  const myAdvance = calculatePositionStatisticsForFlag(myPlayerInfo.creeps, enemyPlayerInfo.flag)
-  console.log(myAdvance.toString())
-  const enemyAdvance = calculatePositionStatisticsForFlag(enemyPlayerInfo.creeps, myPlayerInfo.flag)
-  console.log(enemyAdvance.toString())
-
-  defendMyFlag.forEach(advancePositionGoal)
-  rushEnemyFlag.forEach(advancePositionGoal)
-
   autoCombat()
+
+  const myAdvance = calculatePositionStatisticsForFlag(myPlayerInfo.creeps, enemyPlayerInfo.flag)
+  console.log('My    ' + myAdvance.toString())
+  const enemyAdvance = calculatePositionStatisticsForFlag(enemyPlayerInfo.creeps, myPlayerInfo.flag)
+  console.log('Enemy ' + enemyAdvance.toString())
+
+  if (enemyAdvance.canReach <= 0) {
+    rushEnemyFlag.forEach(advancePositionGoal)
+    return
+  }
+
+  if (getTicks() <= 100) {
+    defendMyFlag.forEach(advancePositionGoal)
+    scout.forEach(advancePositionGoal)
+  } else {
+    rushEnemyFlag.forEach(advancePositionGoal)
+  }
 }
