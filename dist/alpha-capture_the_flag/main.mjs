@@ -50,7 +50,7 @@ class FlagGoal {
 }
 let myPlayerInfo;
 let enemyPlayerInfo;
-let flagGoals;
+let flagGoals = []
 let engageDistance;
 function loop() {
     if (getTicks() === 1) {
@@ -186,8 +186,8 @@ function atSamePosition(a, b) {
 function getDirectionByPosition(from, to) {
     if (atSamePosition(from, to))
         return undefined;
-    const dx = from.x - to.x;
-    const dy = from.y - to.y;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
     return getDirection(dx, dy);
 }
 function toFlagNoPathfinding(creep, flag) {
