@@ -348,7 +348,7 @@ class CreepLine {
 
   private chaseHead (options?: FindPathOptions) : [CreepMoveResult, Creep] {
     const state = this.refreshState()
-    if (state != OK) return [state, undefined]
+    if (state !== OK) return [state, undefined]
 
     // all !operational creeps are removed
     // all creeps can move
@@ -374,10 +374,10 @@ class CreepLine {
         // just to cover the case
         return [ERR_INVALID_ARGS, undefined]
       }
-
-      // give head for command
-      return [OK, this.creeps[this.creeps.length - 1]]
     }
+
+    // give head for command
+    return [OK, this.creeps[this.creeps.length - 1]]
   }
 
   private refreshState () : CreepMoveResult {
