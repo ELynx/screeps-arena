@@ -50,21 +50,19 @@ function fillPlayerInfo (whoFunction: (x: Ownable) => boolean): PlayerInfo {
   return playerInfo
 }
 
-class FlagGoal {
+class PositionGoal {
   creep: Creep
-  flag: Flag
-  pathfinding: boolean
+  position: Position
 
-  constructor (creep: Creep, flag: Flag, pathfidning: boolean) {
+  constructor (creep: Creep, position: Position) {
     this.creep = creep
-    this.flag = flag
-    this.pathfinding = pathfidning
+    this.position = position
   }
 }
 
 let myPlayerInfo: PlayerInfo
 let enemyPlayerInfo: PlayerInfo
-let flagGoals: FlagGoal[] = []
+let positionGoals: PositionGoal[] = []
 let engageDistance: number
 
 export function loop (): void {
@@ -83,12 +81,12 @@ export function loop (): void {
 
     for (const creep of myPlayerInfo.creeps) {
       if (myPlayerInfo.flag && myPlayerInfo.flag.y === creep.y) {
-        flagGoals.push(new FlagGoal(creep, myPlayerInfo.flag, false))
+        positionGoals.push(new PositionGoal(creep, myPlayerInfo.flag as Position))
         continue
       }
 
       if (enemyPlayerInfo.flag) {
-        flagGoals.push(new FlagGoal(creep, enemyPlayerInfo.flag, true))
+        positionGoals.push(new PositionGoal(creep, enemyPlayerInfo.flag as Position))
       }
     }
 
@@ -237,29 +235,12 @@ function getDirectionByPosition (from: Position, to: Position) : Direction | und
   return getDirection(dx, dy)
 }
 
-function toFlagNoPathfinding (creep: Creep, flag: Flag) : void {
-  const direction = getDirectionByPosition(creep, flag)
-  if (direction !== undefined) {
-    creep.move(direction)
-  }
-}
+function advancePositionGoal (positionGoal: PositionGoal) {
+  if (!operational(positionGoal.creep)) return
+  if (positionGoal.creep.fatigue > 0) return
+  if (!hasActiveBodyPart(positionGoal.creep, MOVE)) return
 
-function toFlagYesPathfinding (creep: Creep, flag: Flag) : void {
-  creep.moveTo(flag)
-}
-
-function advanceFlagGoal (flagGoal: FlagGoal) {
-  if (!exists(flagGoal.flag)) return
-
-  if (!operational(flagGoal.creep)) return
-  if (flagGoal.creep.fatigue > 0) return
-  if (!hasActiveBodyPart(flagGoal.creep, MOVE)) return
-
-  if (flagGoal.pathfinding) {
-    toFlagYesPathfinding(flagGoal.creep, flagGoal.flag)
-  } else {
-    toFlagNoPathfinding(flagGoal.creep, flagGoal.flag)
-  }
+  positionGoal.creep.moveTo(positionGoal.position)
 }
 
 type Attackable = Creep | Structure
@@ -359,7 +340,7 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
 }
 
 function play (): void {
-  flagGoals.forEach(advanceFlagGoal)
+  positionGoals.forEach(advancePositionGoal)
 
   const ticks = getTicks()
 
