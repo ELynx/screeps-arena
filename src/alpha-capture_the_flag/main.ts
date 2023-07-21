@@ -82,11 +82,9 @@ export function loop (): void {
     )
 
     for (const creep of myPlayerInfo.creeps) {
-      if (myPlayerInfo.flag) {
-        if (myPlayerInfo.flag.y === creep.y) {
-          flagGoals.push(new FlagGoal(creep, myPlayerInfo.flag, false))
-          continue
-        }
+      if (myPlayerInfo.flag && myPlayerInfo.flag.y === creep.y) {
+        flagGoals.push(new FlagGoal(creep, myPlayerInfo.flag, false))
+        continue
       }
 
       if (enemyPlayerInfo.flag) {
@@ -94,7 +92,11 @@ export function loop (): void {
       }
     }
 
-    engageDistance = getRange(myPlayerInfo.flag as Position, enemyPlayerInfo.flag as Position)
+	if (myPlayerInfo.flag && enemyPlayerInfo.flag) {
+      engageDistance = getRange(myPlayerInfo.flag as Position, enemyPlayerInfo.flag as Position)
+	} else {
+	  engageDistance = TOWER_RANGE * 2
+	}
   }
 
   play()
@@ -181,9 +183,9 @@ class StructureTowerScore {
 
 function operateTower (tower: StructureTower): void {
   if (tower.cooldown > 0) return
-  if (tower.store.getUsedCapacity(RESOURCE_ENERGY) < TOWER_ENERGY_COST) return
+  if ((tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return
 
-  const saveEnergy = tower.store.getFreeCapacity(RESOURCE_ENERGY) > TOWER_ENERGY_COST
+  const saveEnergy = (tower.store.getFreeCapacity(RESOURCE_ENERGY) || 0) > TOWER_ENERGY_COST
 
   const allCreepsInRange = allCreeps()
     .filter(operational)
