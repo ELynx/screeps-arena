@@ -1,6 +1,6 @@
 import { StructureTower, Creep } from '/game/prototypes';
-import { TOWER_RANGE, RESOURCE_ENERGY, TOWER_ENERGY_COST, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_POWER, RANGED_ATTACK_DISTANCE_RATE, TOWER_OPTIMAL_RANGE, TOWER_FALLOFF_RANGE, TOWER_FALLOFF } from '/game/constants';
-import { getTicks, getRange, getObjectsByPrototype, getDirection } from '/game/utils';
+import { RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, MOVE, TOWER_RANGE, ATTACK, HEAL, RANGED_ATTACK, RANGED_ATTACK_POWER, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
+import { getTicks, getObjectsByPrototype, getRange } from '/game/utils';
 import { Visual } from '/game/visual';
 import { Flag } from '/arena/season_alpha/capture_the_flag/basic';
 
@@ -41,17 +41,8 @@ function fillPlayerInfo(whoFunction) {
     playerInfo.creeps = allCreeps().filter(whoFunction);
     return playerInfo;
 }
-class FlagGoal {
-    constructor(creep, flag, pathfidning) {
-        this.creep = creep;
-        this.flag = flag;
-        this.pathfinding = pathfidning;
-    }
-}
 let myPlayerInfo;
 let enemyPlayerInfo;
-let flagGoals = []
-let engageDistance;
 function loop() {
     if (getTicks() === 1) {
         myPlayerInfo = fillPlayerInfo(function my(what) {
@@ -60,21 +51,6 @@ function loop() {
         enemyPlayerInfo = fillPlayerInfo(function enemy(what) {
             return what.my === false;
         });
-        for (const creep of myPlayerInfo.creeps) {
-            if (myPlayerInfo.flag && myPlayerInfo.flag.y === creep.y) {
-                flagGoals.push(new FlagGoal(creep, myPlayerInfo.flag, false));
-                continue;
-            }
-            if (enemyPlayerInfo.flag) {
-                flagGoals.push(new FlagGoal(creep, enemyPlayerInfo.flag, true));
-            }
-        }
-        if (myPlayerInfo.flag && enemyPlayerInfo.flag) {
-            engageDistance = getRange(myPlayerInfo.flag, enemyPlayerInfo.flag);
-        }
-        else {
-            engageDistance = TOWER_RANGE * 2;
-        }
     }
     play();
 }
@@ -100,16 +76,15 @@ function hasActiveBodyPart(creep, type) {
 function notMaxHits(creep) {
     return creep.hits < creep.hitsMax;
 }
-function towerSomethingPower(startAmount, startRange) {
-    let amount = startAmount;
-    let range = startRange;
-    if (range > TOWER_OPTIMAL_RANGE) {
-        if (range > TOWER_FALLOFF_RANGE)
-            range = TOWER_FALLOFF_RANGE;
-        amount -= amount * TOWER_FALLOFF * (range - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE);
-        amount = Math.floor(amount);
-    }
-    return amount;
+function atSamePosition(a, b) {
+    return a.x === b.x && a.y === b.y;
+}
+function towerPower(fullAmount, range) {
+    if (range <= TOWER_OPTIMAL_RANGE)
+        return fullAmount;
+    const effectiveRange = Math.min(range, TOWER_FALLOFF_RANGE);
+    const effectiveAmount = fullAmount * (1 - TOWER_FALLOFF * (effectiveRange - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE));
+    return Math.floor(effectiveAmount);
 }
 class StructureTowerScore {
     constructor(creep, range) {
@@ -124,7 +99,7 @@ class StructureTowerScore {
         if (this.creep.my) {
             const hitsLost = this.creep.hitsMax - this.creep.hits;
             const percent = hitsLost / this.creep.hitsMax * 100;
-            const withFalloff = towerSomethingPower(percent, this.range);
+            const withFalloff = towerPower(percent, this.range);
             return Math.round(withFalloff);
         }
         let bodyCost = 0;
@@ -141,7 +116,7 @@ class StructureTowerScore {
         // again ignore mutants for simplicity
         const maxBodyCost = this.creep.body.length * 5;
         const percent = bodyCost / maxBodyCost * 100;
-        const withFalloff = towerSomethingPower(percent, this.range);
+        const withFalloff = towerPower(percent, this.range);
         return Math.round(withFalloff);
     }
 }
@@ -163,7 +138,12 @@ function operateTower(tower) {
         return new StructureTowerScore(creep, range);
     })
         .filter(function (target) {
-        return target.range <= TOWER_RANGE;
+        if (target.creep.my) {
+            return target.range <= TOWER_OPTIMAL_RANGE * 3;
+        }
+        else {
+            return target.range <= TOWER_OPTIMAL_RANGE * 2;
+        }
     })
         .sort(function (a, b) {
         return b.score - a.score;
@@ -178,41 +158,6 @@ function operateTower(tower) {
     }
     else {
         tower.attack(target.creep);
-    }
-}
-function atSamePosition(a, b) {
-    return a.x === b.x && a.y === b.y;
-}
-function getDirectionByPosition(from, to) {
-    if (atSamePosition(from, to))
-        return undefined;
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    return getDirection(dx, dy);
-}
-function toFlagNoPathfinding(creep, flag) {
-    const direction = getDirectionByPosition(creep, flag);
-    if (direction !== undefined) {
-        creep.move(direction);
-    }
-}
-function toFlagYesPathfinding(creep, flag) {
-    creep.moveTo(flag);
-}
-function advanceFlagGoal(flagGoal) {
-    if (!exists(flagGoal.flag))
-        return;
-    if (!operational(flagGoal.creep))
-        return;
-    if (flagGoal.creep.fatigue > 0)
-        return;
-    if (!hasActiveBodyPart(flagGoal.creep, MOVE))
-        return;
-    if (flagGoal.pathfinding) {
-        toFlagYesPathfinding(flagGoal.creep, flagGoal.flag);
-    }
-    else {
-        toFlagNoPathfinding(flagGoal.creep, flagGoal.flag);
     }
 }
 class AttackableAndRange {
@@ -287,24 +232,99 @@ function autoAll(creep, attackables, healables) {
     autoRanged(creep, attackables);
     autoHeal(creep, healables);
 }
+function autoCombat() {
+    myPlayerInfo.towers.filter(operational).forEach(operateTower);
+    const enemyCreeps = enemyPlayerInfo.creeps.filter(operational);
+    const enemyTowers = enemyPlayerInfo.towers.filter(operational);
+    const enemyAttackables = enemyCreeps.concat(enemyTowers);
+    const myCreeps = myPlayerInfo.creeps.filter(operational);
+    const myHealableCreeps = myCreeps.filter(notMaxHits);
+    myCreeps.forEach(function (creep) {
+        autoAll(creep, enemyAttackables, myHealableCreeps);
+    });
+}
+class PositionGoal {
+    constructor(creep, position) {
+        this.creep = creep;
+        this.position = position;
+    }
+}
+function advancePositionGoal(positionGoal) {
+    if (!operational(positionGoal.creep))
+        return;
+    if (positionGoal.creep.fatigue > 0)
+        return;
+    if (atSamePosition(positionGoal.creep, positionGoal.position))
+        return;
+    if (!hasActiveBodyPart(positionGoal.creep, MOVE))
+        return;
+    positionGoal.creep.moveTo(positionGoal.position);
+}
+class PositionStatistics {
+    constructor(ranges) {
+        this.numberOfCreeps = ranges.length;
+        this.min = Number.MAX_SAFE_INTEGER;
+        this.max = Number.MIN_SAFE_INTEGER;
+        this.average = NaN;
+        this.median = NaN;
+        this.canReach = 0;
+        if (this.numberOfCreeps === 0)
+            return;
+        const ticksLimit = 2000; // TODO arena info
+        const ticksNow = getTicks();
+        const ticksRemaining = ticksLimit - ticksNow;
+        // for median
+        const sorted = ranges.sort();
+        let total = 0;
+        for (let x of sorted) {
+            if (x < this.min)
+                this.min = x;
+            if (x > this.max)
+                this.max = x;
+            this.canReach += x <= ticksRemaining ? 1 : 0;
+            total += x;
+        }
+        this.average = total / this.numberOfCreeps;
+        this.median = sorted[Math.floor(this.numberOfCreeps) / 2];
+    }
+    toString() {
+        {
+            return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] avg [${this.average}] mdn [${this.median}] reach [${this.canReach}] `;
+        }
+    }
+}
+function calculatePositionStatistics(creeps, position) {
+    const ranges = creeps.filter(operational).map(function (creep) {
+        return getRange(position, creep);
+    });
+    return new PositionStatistics(ranges);
+}
+function calculatePositionStatisticsForFlag(creeps, flag) {
+    if (!exists(flag))
+        return new PositionStatistics([]);
+    return calculatePositionStatistics(creeps, flag);
+}
+let defendMyFlag = [];
+let rushEnemyFlag = [];
 function play() {
-    flagGoals.forEach(advanceFlagGoal);
-    const ticks = getTicks();
-    // to not waste time before any meaningful work for towers is possible
-    if (ticks > (engageDistance / 2 - 5)) {
-        myPlayerInfo.towers.filter(operational).forEach(operateTower);
+    if (getTicks() === 1) {
+        for (const creep of myPlayerInfo.creeps) {
+            if (myPlayerInfo.flag && myPlayerInfo.flag.y === creep.y) {
+                defendMyFlag.push(new PositionGoal(creep, myPlayerInfo.flag));
+                continue;
+            }
+            if (enemyPlayerInfo.flag) {
+                rushEnemyFlag.push(new PositionGoal(creep, enemyPlayerInfo.flag));
+            }
+        }
     }
-    // to not waste time before any meaningful work for creeps is possible
-    if (ticks > (engageDistance / 3 - 5)) {
-        const enemyCreeps = enemyPlayerInfo.creeps.filter(operational);
-        const enemyTowers = enemyPlayerInfo.towers.filter(operational);
-        const enemyAttackables = enemyCreeps.concat(enemyTowers);
-        const myCreeps = myPlayerInfo.creeps.filter(operational);
-        const myHealableCreeps = myCreeps.filter(notMaxHits);
-        myCreeps.forEach(function (creep) {
-            autoAll(creep, enemyAttackables, myHealableCreeps);
-        });
-    }
+    const myAdvance = calculatePositionStatisticsForFlag(myPlayerInfo.creeps, enemyPlayerInfo.flag);
+    console.log(myAdvance.toString());
+    const enemyAdvance = calculatePositionStatisticsForFlag(enemyPlayerInfo.creeps, myPlayerInfo.flag);
+    console.log(enemyAdvance.toString());
+    defendMyFlag.forEach(advancePositionGoal);
+    rushEnemyFlag.forEach(advancePositionGoal);
+    autoCombat();
 }
 
 export { loop };
