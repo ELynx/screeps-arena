@@ -394,9 +394,9 @@ class PositionStatistics {
     this.median = sorted[Math.floor(this.numberOfCreeps) / 2]
   }
 
-  toString () : string {{
+  toString () : string {
     return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] avg [${this.average}] mdn [${this.median}] reach [${this.canReach}] `;
-  }}
+  }
 }
 
 function calculatePositionStatistics (creeps: Creep[], position: Position) : PositionStatistics {
