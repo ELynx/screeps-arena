@@ -126,17 +126,13 @@ function notMaxHits (creep: Creep) : boolean {
   return creep.hits < creep.hitsMax
 }
 
-function towerSomethingPower (startAmount: number, startRange: number) : number {
-  let amount = startAmount
-  let range = startRange
+function towerPower (fullAmount: number, range: number) : number {
+  if (range <= TOWER_OPTIMAL_RANGE) return fullAmount
 
-  if (range > TOWER_OPTIMAL_RANGE) {
-    if (range > TOWER_FALLOFF_RANGE) range = TOWER_FALLOFF_RANGE
-    amount -= amount * TOWER_FALLOFF * (range - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE)
-    amount = Math.floor(amount)
-  }
+  const effectiveRange = Math.min(range, TOWER_FALLOFF_RANGE)
+  const effectiveAmount = fullAmount * (1 - TOWER_FALLOFF * (effectiveRange - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE))
 
-  return amount
+  return Math.floor(effectiveAmount)
 }
 
 class StructureTowerScore {
@@ -157,7 +153,7 @@ class StructureTowerScore {
     if (this.creep.my) {
       const hitsLost = this.creep.hitsMax - this.creep.hits
       const percent = hitsLost / this.creep.hitsMax * 100
-      const withFalloff = towerSomethingPower(percent, this.range)
+      const withFalloff = towerPower(percent, this.range)
 
       return Math.round(withFalloff)
     }
@@ -175,7 +171,7 @@ class StructureTowerScore {
     // again ignore mutants for simplicity
     const maxBodyCost = this.creep.body.length * 5
     const percent = bodyCost / maxBodyCost * 100
-    const withFalloff = towerSomethingPower(percent, this.range)
+    const withFalloff = towerPower(percent, this.range)
 
     return Math.round(withFalloff)
   }
