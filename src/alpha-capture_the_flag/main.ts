@@ -378,6 +378,10 @@ class PositionStatistics {
     this.average = total / this.numberOfCreeps
     this.median = sorted[Math.floor(this.numberOfCreeps) / 2]
   }
+
+  toString () : string {{
+    return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] avg [${this.average}] mdn [${this.median}] reach [${this.canReach}] `;
+  }}
 }
 
 function calculatePositionStatistics (creeps: Creep[], position: Position) : PositionStatistics {
@@ -414,7 +418,9 @@ function play () : void {
   }
 
   const myAdvance = calculatePositionStatisticsForFlag(myPlayerInfo.creeps, enemyPlayerInfo.flag)
+  console.log(myAdvance.toString())
   const enemyAdvance = calculatePositionStatisticsForFlag(enemyPlayerInfo.creeps, myPlayerInfo.flag)
+  console.log(enemyAdvance.toString())
 
   defendMyFlag.forEach(advancePositionGoal)
   rushEnemyFlag.forEach(advancePositionGoal)
