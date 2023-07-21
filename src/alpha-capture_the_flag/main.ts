@@ -1,6 +1,6 @@
-import { Creep, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
-import { ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE } from 'game/constants'
-import { Direction, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
+import { Creep, CreepMoveResult, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
+import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED } from 'game/constants'
+import { Direction, FindPathOptions, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Visual } from 'game/visual'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
@@ -319,6 +319,47 @@ function autoCombat () {
   )
 }
 
+class CreepLine {
+  creeps: Creep[]
+
+  constructor (creeps: Creep[]) {
+    this.creeps = creeps
+  }
+
+  move (direction: Direction) : CreepMoveResult {
+    let [rc, head] = this.chaseHead()
+    if (rc !== OK) return rc
+
+    return head.move(direction)
+  }
+
+  moveTo (target: Position, options?: FindPathOptions) {
+    let [rc, head] = this.chaseHead()
+    if (rc !== OK) return rc
+
+    return head.moveTo(target, options)
+  }
+
+  private chaseHead () : [CreepMoveResult, Creep] {
+    const state = this.refreshState()
+    if (state != OK) return [state, undefined]
+
+    
+  }
+
+  private refreshState () : CreepMoveResult {
+    this.creeps = this.creeps.filter(operational)
+    if (this.creeps.length === 0) return ERR_NO_BODYPART
+
+    for (let creep of this.creeps) {
+      if (creep.fatigue > 0) return ERR_TIRED
+      if (!hasActiveBodyPart(creep, MOVE)) return ERR_NO_BODYPART
+    }
+
+    return OK
+  }
+}
+
 class PositionGoal {
   creep: Creep
   position: Position
@@ -331,8 +372,8 @@ class PositionGoal {
 
 function advancePositionGoal (positionGoal: PositionGoal) {
   if (!operational(positionGoal.creep)) return
-  if (positionGoal.creep.fatigue > 0) return
   if (atSamePosition(positionGoal.creep as Position, positionGoal.position)) return
+  if (positionGoal.creep.fatigue > 0) return
   if (!hasActiveBodyPart(positionGoal.creep, MOVE)) return
 
   positionGoal.creep.moveTo(positionGoal.position)
