@@ -64,7 +64,7 @@ class FlagGoal {
 
 let myPlayerInfo: PlayerInfo
 let enemyPlayerInfo: PlayerInfo
-let flagGoals: FlagGoal[]
+let flagGoals: FlagGoal[] = []
 let engageDistance: number
 
 export function loop (): void {
@@ -231,8 +231,8 @@ function atSamePosition (a: Position, b: Position) : boolean {
 function getDirectionByPosition (from: Position, to: Position) : Direction | undefined {
   if (atSamePosition(from, to)) return undefined
 
-  const dx = from.x - to.x
-  const dy = from.y - to.y
+  const dx = to.x - from.x
+  const dy = to.y - from.y
 
   return getDirection(dx, dy)
 }
