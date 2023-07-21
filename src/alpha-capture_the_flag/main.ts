@@ -108,7 +108,7 @@ function exists (something?: Ownable) : boolean {
 
 function operational (something?: StructureTower | Creep) : boolean {
   if (!exists(something)) return false
-  if (something.hits && something.hits <= 0) return false
+  if (something!.hits && something!.hits <= 0) return false
   return true
 }
 
