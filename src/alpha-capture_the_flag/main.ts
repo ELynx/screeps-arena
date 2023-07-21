@@ -95,7 +95,7 @@ export function loop (): void {
     if (myPlayerInfo.flag && enemyPlayerInfo.flag) {
       engageDistance = getRange(myPlayerInfo.flag as Position, enemyPlayerInfo.flag as Position)
     } else {
-	  engageDistance = TOWER_RANGE * 2
+      engageDistance = TOWER_RANGE * 2
     }
   }
 
