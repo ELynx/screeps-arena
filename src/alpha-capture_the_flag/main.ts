@@ -40,7 +40,7 @@ class PlayerInfo {
 
 type Ownable = Flag | StructureTower | Creep
 
-function fillPlayerInfo (whoFunction: (x: Ownable) => boolean): PlayerInfo {
+function fillPlayerInfo (whoFunction: (x: Ownable) => boolean) : PlayerInfo {
   const playerInfo = new PlayerInfo()
 
   playerInfo.flag = allFlags().find(whoFunction)
@@ -62,8 +62,8 @@ class PositionGoal {
 
 let myPlayerInfo: PlayerInfo
 let enemyPlayerInfo: PlayerInfo
+
 let positionGoals: PositionGoal[] = []
-let engageDistance: number
 
 export function loop (): void {
   if (getTicks() === 1) {
@@ -88,12 +88,6 @@ export function loop (): void {
       if (enemyPlayerInfo.flag) {
         positionGoals.push(new PositionGoal(creep, enemyPlayerInfo.flag as Position))
       }
-    }
-
-    if (myPlayerInfo.flag && enemyPlayerInfo.flag) {
-      engageDistance = getRange(myPlayerInfo.flag as Position, enemyPlayerInfo.flag as Position)
-    } else {
-      engageDistance = TOWER_RANGE * 2
     }
   }
 
@@ -339,29 +333,81 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   autoHeal(creep, healables)
 }
 
+class PositionStatistics {
+  numberOfCreeps: number
+
+  min: number
+  max: number
+  average: number
+  median: number
+
+  canReach: number
+
+  constructor (ranges: number[]) {
+    this.numberOfCreeps = ranges.length
+    this.min = Number.MAX_SAFE_INTEGER
+    this.max = Number.MIN_SAFE_INTEGER
+    this.average = NaN
+    this.median = NaN
+    this.canReach = 0
+
+    if (this.numberOfCreeps === 0) return
+
+    const ticksLimit = 2000 // TODO arena info
+    const ticksNow = getTicks()
+    const ticksRemaining = ticksLimit - ticksNow
+
+    const sorted = ranges.sort()
+
+    let total = 0
+    for (let x of sorted) {
+      if (x < this.min) this.min = x
+      if (x > this.max) this.max = x
+
+      this.canReach += x <= ticksRemaining ? 1 : 0
+
+      total += x
+    }
+
+    this.average = total / this.numberOfCreeps
+    this.median = sorted[Math.floor(this.numberOfCreeps) / 2]
+  }
+}
+
+function calculatePositionStatistics (creeps: Creep[], position: Position) : PositionStatistics {
+  const ranges = creeps.filter(operational).map(
+    function (creep: Creep) : number {
+      return getRange(position, creep as Position)
+    }
+  )
+
+  return new PositionStatistics(ranges)
+}
+
+function calculatePositionStatisticsForFlag (creeps: Creep[], flag?: Flag) : PositionStatistics {
+  if (!exists(flag)) return new PositionStatistics([])
+
+  return calculatePositionStatistics(creeps, flag! as Position)
+}
+
 function play (): void {
   positionGoals.forEach(advancePositionGoal)
 
-  const ticks = getTicks()
+  const myAdvance = calculatePositionStatisticsForFlag(myPlayerInfo.creeps, enemyPlayerInfo.flag)
+  const enemyAdvance = calculatePositionStatisticsForFlag(enemyPlayerInfo.creeps, myPlayerInfo.flag)
 
-  // to not waste time before any meaningful work for towers is possible
-  if (ticks > (engageDistance / 2 - 5)) {
-    myPlayerInfo.towers.filter(operational).forEach(operateTower)
-  }
+  myPlayerInfo.towers.filter(operational).forEach(operateTower)
 
-  // to not waste time before any meaningful work for creeps is possible
-  if (ticks > (engageDistance / 3 - 5)) {
-    const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
-    const enemyTowers = enemyPlayerInfo.towers.filter(operational)
-    const enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
+  const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
+  const enemyTowers = enemyPlayerInfo.towers.filter(operational)
+  const enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
 
-    const myCreeps = myPlayerInfo.creeps.filter(operational)
-    const myHealableCreeps = myCreeps.filter(notMaxHits)
+  const myCreeps = myPlayerInfo.creeps.filter(operational)
+  const myHealableCreeps = myCreeps.filter(notMaxHits)
 
-    myCreeps.forEach(
-      function (creep) : void {
-        autoAll(creep, enemyAttackables, myHealableCreeps)
-      }
-    )
-  }
+  myCreeps.forEach(
+    function (creep) : void {
+      autoAll(creep, enemyAttackables, myHealableCreeps)
+    }
+  )
 }
