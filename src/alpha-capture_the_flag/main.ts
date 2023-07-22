@@ -1,4 +1,4 @@
-import { Creep, CreepMoveResult, GameObject, Position, Structure, StructureTower } from 'game/prototypes'
+import { Creep, CreepMoveResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
 import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS } from 'game/constants'
 import { Direction, FindPathOptions, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Visual } from 'game/visual'
@@ -33,17 +33,15 @@ function allCreeps () : Creep[] {
 }
 
 class PlayerInfo {
-  flag: Flag | undefined
   towers: StructureTower[] = []
   creeps: Creep[] = []
 }
 
-type Ownable = Flag | StructureTower | Creep
+type Ownable = Flag | OwnedStructure | Creep
 
 function fillPlayerInfo (whoFunction: (x: Ownable) => boolean) : PlayerInfo {
   const playerInfo = new PlayerInfo()
 
-  playerInfo.flag = allFlags().find(whoFunction)
   playerInfo.towers = allTowers().filter(whoFunction)
   playerInfo.creeps = allCreeps().filter(whoFunction)
 
@@ -71,13 +69,13 @@ export function loop () : void {
   play()
 }
 
-function exists (something?: Ownable) : boolean {
+function exists (something?: GameObject) : boolean {
   if (something === undefined) return false
   if (something.exists === false) return false
   return true
 }
 
-function operational (something?: StructureTower | Creep) : boolean {
+function operational (something?: Structure | Creep) : boolean {
   if (!exists(something)) return false
   if (something!.hits && something!.hits <= 0) return false
   return true
@@ -163,8 +161,6 @@ function operateTower (tower: StructureTower) : void {
   if (tower.cooldown > 0) return
   if ((tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return
 
-  const saveEnergy = (tower.store.getFreeCapacity(RESOURCE_ENERGY) || 0) > TOWER_ENERGY_COST
-
   const allCreepsInRange = allCreeps()
     .filter(operational)
     .filter(
@@ -196,13 +192,12 @@ function operateTower (tower: StructureTower) : void {
 
   if (allCreepsInRange.length === 0) return
 
-  const target = allCreepsInRange[0]
-  if (saveEnergy && target.score < 10) return
+  const target = allCreepsInRange[0].creep
 
-  if (target.creep.my) {
-    tower.heal(target.creep)
+  if (target.my) {
+    tower.heal(target)
   } else {
-    tower.attack(target.creep)
+    tower.attack(target)
   }
 }
 
@@ -322,8 +317,14 @@ function autoCombat () {
 class CreepLine {
   creeps: Creep[]
 
+  private refreshTick : number
+  private refreshCode : CreepMoveResult
+
   constructor (creeps: Creep[]) {
     this.creeps = creeps
+
+    this.refreshTick = NaN
+    this.refreshCode = OK
   }
 
   move (direction: Direction) : CreepMoveResult {
@@ -381,19 +382,54 @@ class CreepLine {
   }
 
   private refreshState () : CreepMoveResult {
-    this.creeps = this.creeps.filter(operational)
-    if (this.creeps.length === 0) return ERR_NO_BODYPART
+    if (getTicks() === this.refreshTick) return this.refreshCode
 
-    for (const creep of this.creeps) {
-      if (creep.fatigue > 0) return ERR_TIRED
-      if (!hasActiveBodyPart(creep, MOVE)) return ERR_NO_BODYPART
+    this.creeps = this.creeps.filter(operational)
+
+    if (this.creeps.length === 0) {
+      this.refreshCode = ERR_NO_BODYPART
+    } else {
+      this.refreshCode = OK
+
+      for (const creep of this.creeps) {
+        if (creep.fatigue > 0) {
+          this.refreshCode = ERR_TIRED
+          break
+        }
+
+        if (!hasActiveBodyPart(creep, MOVE)) {
+          this.refreshCode = ERR_NO_BODYPART
+          break
+        }
+      }
     }
 
-    return OK
+    return this.refreshCode
   }
 }
 
-class PositionGoal {
+interface PositionGoal {
+  advance () : CreepMoveResult
+}
+
+class SingleCreepPositionGoal implements PositionGoal {
+  creep: Creep
+  position: Position
+
+  constructor (creep: Creep, position: Position) {
+    this.creep = creep
+    this.position = position
+  }
+
+  advance(): CreepMoveResult {
+    if (!operational(this.creep)) return ERR_NO_BODYPART
+    if (atSamePosition(this.creep as Position, this.position)) return OK
+
+    return this.creep.moveTo(this.position)
+  }
+}
+
+class LinePositionGoal implements PositionGoal {
   creepLine: CreepLine
   position: Position
 
@@ -401,13 +437,14 @@ class PositionGoal {
     this.creepLine = new CreepLine(creeps)
     this.position = position
   }
-}
 
-function advancePositionGoal (positionGoal: PositionGoal) {
-  const headPosition = positionGoal.creepLine.headPosition()
-  if (headPosition === undefined) return
+  advance(): CreepMoveResult {
+    const headPosition = this.creepLine.headPosition()
+    if (headPosition === undefined) return
+    if (atSamePosition(headPosition, this.position)) return
 
-  positionGoal.creepLine.moveTo(positionGoal.position)
+    this.creepLine.moveTo(this.position)
+  }
 }
 
 function defineGoalsFromAscii (base: Position, creeps: Creep[], ascii: string[][]) : [PositionGoal[], Creep[]] {
@@ -416,7 +453,7 @@ function defineGoalsFromAscii (base: Position, creeps: Creep[], ascii: string[][
 
   for (const creep of creeps) {
     if (creep.y === base.y) {
-      goals.push(new PositionGoal([creep], base))
+      goals.push(new SingleCreepPositionGoal(creep, base))
     } else {
       unusedCreeps.push(creep)
     }
@@ -435,7 +472,7 @@ class PositionStatistics {
 
   canReach: number
 
-  constructor (ranges: number[]) {
+  private constructor (ranges: number[]) {
     this.numberOfCreeps = ranges.length
     this.min = Number.MAX_SAFE_INTEGER
     this.max = Number.MIN_SAFE_INTEGER
@@ -466,25 +503,25 @@ class PositionStatistics {
     this.median = sorted[Math.floor(this.numberOfCreeps) / 2]
   }
 
+  static forCreepsAndPosition (creeps: Creep[], position: Position) : PositionStatistics {
+    const ranges = creeps.filter(operational).map(
+      function (creep: Creep) : number {
+        return getRange(position, creep as Position)
+      }
+    )
+  
+    return new PositionStatistics(ranges)
+  }
+
+  static forCreepsAndFlag (creeps: Creep[], flag?: Flag) : PositionStatistics {
+    if (!exists(flag)) return new PositionStatistics([])
+  
+    return PositionStatistics.forCreepsAndPosition(creeps, flag! as Position)
+  }
+
   toString () : string {
     return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] avg [${this.average}] mdn [${this.median}] reach [${this.canReach}] `
   }
-}
-
-function calculatePositionStatistics (creeps: Creep[], position: Position) : PositionStatistics {
-  const ranges = creeps.filter(operational).map(
-    function (creep: Creep) : number {
-      return getRange(position, creep as Position)
-    }
-  )
-
-  return new PositionStatistics(ranges)
-}
-
-function calculatePositionStatisticsForFlag (creeps: Creep[], flag?: Flag) : PositionStatistics {
-  if (!exists(flag)) return new PositionStatistics([])
-
-  return calculatePositionStatistics(creeps, flag! as Position)
 }
 
 let defendMyFlag : PositionGoal[]
@@ -492,40 +529,5 @@ const scout : PositionGoal[] = []
 const rushEnemyFlag : PositionGoal[] = []
 
 function play () : void {
-  if (getTicks() === 1) {
-    let scouts : Creep[]
-
-    if (myPlayerInfo.flag) {
-      [defendMyFlag, scouts] = defineGoalsFromAscii(myPlayerInfo.flag as Position, myPlayerInfo.creeps, [['TODO']])
-    } else {
-      scouts = myPlayerInfo.creeps
-    }
-
-    if (enemyPlayerInfo.flag) {
-      scout.push(new PositionGoal(scouts, enemyPlayerInfo.flag as Position))
-
-      for (const creep of myPlayerInfo.creeps) {
-        rushEnemyFlag.push(new PositionGoal([creep], enemyPlayerInfo.flag as Position))
-      }
-    }
-  }
-
   autoCombat()
-
-  const myAdvance = calculatePositionStatisticsForFlag(myPlayerInfo.creeps, enemyPlayerInfo.flag)
-  console.log('My    ' + myAdvance.toString())
-  const enemyAdvance = calculatePositionStatisticsForFlag(enemyPlayerInfo.creeps, myPlayerInfo.flag)
-  console.log('Enemy ' + enemyAdvance.toString())
-
-  if (enemyAdvance.canReach <= 0) {
-    rushEnemyFlag.forEach(advancePositionGoal)
-    return
-  }
-
-  if (getTicks() <= 100) {
-    defendMyFlag.forEach(advancePositionGoal)
-    scout.forEach(advancePositionGoal)
-  } else {
-    rushEnemyFlag.forEach(advancePositionGoal)
-  }
 }
