@@ -317,14 +317,8 @@ function autoCombat () {
 class CreepLine {
   creeps: Creep[]
 
-  private refreshTick : number
-  private refreshCode : CreepMoveResult
-
   constructor (creeps: Creep[]) {
     this.creeps = creeps
-
-    this.refreshTick = NaN
-    this.refreshCode = OK
   }
 
   move (direction: Direction) : CreepMoveResult {
@@ -338,13 +332,9 @@ class CreepLine {
     const [rc, head] = this.chaseHead(options)
     if (rc !== OK) return rc
 
-    return head!.moveTo(target, options)
-  }
+    if (atSamePosition(head! as Position, target)) return OK
 
-  headPosition () : Position | undefined {
-    this.refreshState()
-    if (this.creeps.length === 0) return undefined
-    return this.creeps[this.creeps.length - 1] as Position
+    return head!.moveTo(target, options)
   }
 
   private chaseHead (options?: FindPathOptions) : [CreepMoveResult, Creep?] {
@@ -382,29 +372,16 @@ class CreepLine {
   }
 
   private refreshState () : CreepMoveResult {
-    if (getTicks() === this.refreshTick) return this.refreshCode
-
     this.creeps = this.creeps.filter(operational)
 
-    if (this.creeps.length === 0) {
-      this.refreshCode = ERR_NO_BODYPART
-    } else {
-      this.refreshCode = OK
+    if (this.creeps.length === 0) return ERR_NO_BODYPART
 
-      for (const creep of this.creeps) {
-        if (creep.fatigue > 0) {
-          this.refreshCode = ERR_TIRED
-          break
-        }
-
-        if (!hasActiveBodyPart(creep, MOVE)) {
-          this.refreshCode = ERR_NO_BODYPART
-          break
-        }
-      }
+    for (const creep of this.creeps) {
+      if (creep.fatigue > 0) return ERR_TIRED
+      if (!hasActiveBodyPart(creep, MOVE)) return ERR_NO_BODYPART
     }
 
-    return this.refreshCode
+    return OK
   }
 }
 
@@ -412,20 +389,9 @@ interface PositionGoal {
   advance () : CreepMoveResult
 }
 
-class SingleCreepPositionGoal implements PositionGoal {
-  creep: Creep
-  position: Position
-
-  constructor (creep: Creep, position: Position) {
-    this.creep = creep
-    this.position = position
-  }
-
+class GridPositionGoal implements PositionGoal {
   advance(): CreepMoveResult {
-    if (!operational(this.creep)) return ERR_NO_BODYPART
-    if (atSamePosition(this.creep as Position, this.position)) return OK
-
-    return this.creep.moveTo(this.position)
+    return ERR_INVALID_ARGS
   }
 }
 
@@ -439,27 +405,8 @@ class LinePositionGoal implements PositionGoal {
   }
 
   advance(): CreepMoveResult {
-    const headPosition = this.creepLine.headPosition()
-    if (headPosition === undefined) return
-    if (atSamePosition(headPosition, this.position)) return
-
-    this.creepLine.moveTo(this.position)
+    return this.creepLine.moveTo(this.position)
   }
-}
-
-function defineGoalsFromAscii (base: Position, creeps: Creep[], ascii: string[][]) : [PositionGoal[], Creep[]] {
-  const goals : PositionGoal[] = []
-  const unusedCreeps : Creep[] = []
-
-  for (const creep of creeps) {
-    if (creep.y === base.y) {
-      goals.push(new SingleCreepPositionGoal(creep, base))
-    } else {
-      unusedCreeps.push(creep)
-    }
-  }
-
-  return [goals, unusedCreeps]
 }
 
 class PositionStatistics {
@@ -523,10 +470,6 @@ class PositionStatistics {
     return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] avg [${this.average}] mdn [${this.median}] reach [${this.canReach}] `
   }
 }
-
-let defendMyFlag : PositionGoal[]
-const scout : PositionGoal[] = []
-const rushEnemyFlag : PositionGoal[] = []
 
 function play () : void {
   autoCombat()
