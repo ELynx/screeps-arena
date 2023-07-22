@@ -1,6 +1,6 @@
 import { StructureTower, Creep } from '/game/prototypes';
-import { RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, MOVE, TOWER_RANGE, ATTACK, HEAL, RANGED_ATTACK, RANGED_ATTACK_POWER, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
-import { getTicks, getObjectsByPrototype, getRange } from '/game/utils';
+import { RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, OK, ERR_TIRED, ERR_INVALID_ARGS, ERR_NO_BODYPART, TOWER_RANGE, ATTACK, HEAL, RANGED_ATTACK, RANGED_ATTACK_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
+import { getTicks, getObjectsByPrototype, getRange, getDirection } from '/game/utils';
 import { Visual } from '/game/visual';
 import { Flag } from '/arena/season_alpha/capture_the_flag/basic';
 
@@ -78,6 +78,13 @@ function notMaxHits(creep) {
 }
 function atSamePosition(a, b) {
     return a.x === b.x && a.y === b.y;
+}
+function getDirectionByPosition(from, to) {
+    if (atSamePosition(from, to))
+        return undefined;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    return getDirection(dx, dy);
 }
 function towerPower(fullAmount, range) {
     if (range <= TOWER_OPTIMAL_RANGE)
@@ -243,22 +250,96 @@ function autoCombat() {
         autoAll(creep, enemyAttackables, myHealableCreeps);
     });
 }
+class CreepLine {
+    constructor(creeps) {
+        this.creeps = creeps;
+    }
+    move(direction) {
+        const [rc, head] = this.chaseHead();
+        if (rc !== OK)
+            return rc;
+        return head.move(direction);
+    }
+    moveTo(target, options) {
+        const [rc, head] = this.chaseHead(options);
+        if (rc !== OK)
+            return rc;
+        return head.moveTo(target, options);
+    }
+    headPosition() {
+        this.refreshState();
+        if (this.creeps.length === 0)
+            return undefined;
+        return this.creeps[this.creeps.length - 1];
+    }
+    chaseHead(options) {
+        const state = this.refreshState();
+        if (state !== OK)
+            return [state, undefined];
+        // all !operational creeps are removed
+        // all creeps can move
+        // simple case
+        if (this.creeps.length === 1)
+            return [OK, this.creeps[0]];
+        for (let i = 0; i < this.creeps.length - 1; ++i) {
+            const creep = this.creeps[i];
+            const next = this.creeps[i + 1];
+            const range = getRange(creep, next);
+            if (range === 1) {
+                // just a step
+                const direction = getDirectionByPosition(creep, next);
+                creep.move(direction); // because range 1 should work
+            }
+            else if (range > 1) {
+                creep.moveTo(next, options);
+                // give time to catch up
+                return [ERR_TIRED, undefined];
+            }
+            else {
+                // just to cover the case
+                return [ERR_INVALID_ARGS, undefined];
+            }
+        }
+        // give head for command
+        return [OK, this.creeps[this.creeps.length - 1]];
+    }
+    refreshState() {
+        this.creeps = this.creeps.filter(operational);
+        if (this.creeps.length === 0)
+            return ERR_NO_BODYPART;
+        for (const creep of this.creeps) {
+            if (creep.fatigue > 0)
+                return ERR_TIRED;
+            if (!hasActiveBodyPart(creep, MOVE))
+                return ERR_NO_BODYPART;
+        }
+        return OK;
+    }
+}
 class PositionGoal {
-    constructor(creep, position) {
-        this.creep = creep;
+    constructor(creeps, position) {
+        this.creepLine = new CreepLine(creeps);
         this.position = position;
     }
 }
 function advancePositionGoal(positionGoal) {
-    if (!operational(positionGoal.creep))
+    const headPosition = positionGoal.creepLine.headPosition();
+    if (headPosition === undefined)
         return;
-    if (positionGoal.creep.fatigue > 0)
-        return;
-    if (atSamePosition(positionGoal.creep, positionGoal.position))
-        return;
-    if (!hasActiveBodyPart(positionGoal.creep, MOVE))
-        return;
-    positionGoal.creep.moveTo(positionGoal.position);
+    positionGoal.creepLine.moveTo(positionGoal.position);
+}
+function defineGoalsFromAscii(base, creeps, ascii) {
+    const goals = [];
+    const unusedCreeps = [];
+    for (const creep of creeps) {
+        if (creep.y === base.y) {
+            goals.push(new PositionGoal([creep], base));
+        }
+        else {
+            unusedCreeps.push(creep);
+        }
+    }
+    return [goals, unusedCreeps];
 }
 class PositionStatistics {
     constructor(ranges) {
@@ -276,7 +357,7 @@ class PositionStatistics {
         // for median
         const sorted = ranges.sort();
         let total = 0;
-        for (let x of sorted) {
+        for (const x of sorted) {
             if (x < this.min)
                 this.min = x;
             if (x > this.max)
@@ -288,9 +369,7 @@ class PositionStatistics {
         this.median = sorted[Math.floor(this.numberOfCreeps) / 2];
     }
     toString() {
-        {
-            return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] avg [${this.average}] mdn [${this.median}] reach [${this.canReach}] `;
-        }
+        return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] avg [${this.average}] mdn [${this.median}] reach [${this.canReach}] `;
     }
 }
 function calculatePositionStatistics(creeps, position) {
@@ -304,27 +383,41 @@ function calculatePositionStatisticsForFlag(creeps, flag) {
         return new PositionStatistics([]);
     return calculatePositionStatistics(creeps, flag);
 }
-let defendMyFlag = [];
-let rushEnemyFlag = [];
+let defendMyFlag;
+const scout = [];
+const rushEnemyFlag = [];
 function play() {
     if (getTicks() === 1) {
-        for (const creep of myPlayerInfo.creeps) {
-            if (myPlayerInfo.flag && myPlayerInfo.flag.y === creep.y) {
-                defendMyFlag.push(new PositionGoal(creep, myPlayerInfo.flag));
-                continue;
-            }
-            if (enemyPlayerInfo.flag) {
-                rushEnemyFlag.push(new PositionGoal(creep, enemyPlayerInfo.flag));
+        let scouts;
+        if (myPlayerInfo.flag) {
+            [defendMyFlag, scouts] = defineGoalsFromAscii(myPlayerInfo.flag, myPlayerInfo.creeps);
+        }
+        else {
+            scouts = myPlayerInfo.creeps;
+        }
+        if (enemyPlayerInfo.flag) {
+            scout.push(new PositionGoal(scouts, enemyPlayerInfo.flag));
+            for (const creep of myPlayerInfo.creeps) {
+                rushEnemyFlag.push(new PositionGoal([creep], enemyPlayerInfo.flag));
             }
         }
     }
-    const myAdvance = calculatePositionStatisticsForFlag(myPlayerInfo.creeps, enemyPlayerInfo.flag);
-    console.log(myAdvance.toString());
-    const enemyAdvance = calculatePositionStatisticsForFlag(enemyPlayerInfo.creeps, myPlayerInfo.flag);
-    console.log(enemyAdvance.toString());
-    defendMyFlag.forEach(advancePositionGoal);
-    rushEnemyFlag.forEach(advancePositionGoal);
     autoCombat();
+    const myAdvance = calculatePositionStatisticsForFlag(myPlayerInfo.creeps, enemyPlayerInfo.flag);
+    console.log('My    ' + myAdvance.toString());
+    const enemyAdvance = calculatePositionStatisticsForFlag(enemyPlayerInfo.creeps, myPlayerInfo.flag);
+    console.log('Enemy ' + enemyAdvance.toString());
+    if (enemyAdvance.canReach <= 0) {
+        rushEnemyFlag.forEach(advancePositionGoal);
+        return;
+    }
+    if (getTicks() <= 100) {
+        defendMyFlag.forEach(advancePositionGoal);
+        scout.forEach(advancePositionGoal);
+    }
+    else {
+        rushEnemyFlag.forEach(advancePositionGoal);
+    }
 }
 
 export { loop };
