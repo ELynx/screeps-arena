@@ -55,19 +55,24 @@ function fillPlayerInfo (whoFunction: (x: Ownable) => boolean) : PlayerInfo {
 let myPlayerInfo: PlayerInfo
 let enemyPlayerInfo: PlayerInfo
 
+function collectPlayerInfo () : void {
+  myPlayerInfo = fillPlayerInfo(
+    function my (what: Ownable) : boolean {
+      return what.my === true
+    }
+  )
+
+  enemyPlayerInfo = fillPlayerInfo(
+    function enemy (what: Ownable) : boolean {
+      return what.my === false
+    }
+  )
+}
+
 export function loop () : void {
   if (getTicks() === 1) {
-    myPlayerInfo = fillPlayerInfo(
-      function my (what: Ownable) : boolean {
-        return what.my === true
-      }
-    )
-
-    enemyPlayerInfo = fillPlayerInfo(
-      function enemy (what: Ownable) : boolean {
-        return what.my === false
-      }
-    )
+    collectPlayerInfo()
+    plan()
   }
 
   play()
@@ -407,6 +412,21 @@ interface PositionGoal {
   advance (options?: FindPathOptions) : CreepMoveResult
 }
 
+class SingleCreepPositionGoal implements PositionGoal {
+  creep: Creep
+  position: Position
+
+  constructor (creep: Creep, position: Position) {
+    this.creep = creep
+    this.position = position
+  }
+
+  advance(options?: FindPathOptions): CreepMoveResult {
+    if (!operational(this.creep)) return ERR_NO_BODYPART
+    return this.creep.moveTo(this.position, options)
+  }
+}
+
 class GridPositionGoal implements PositionGoal {
   creeps: Creep[]
   positions: Position[]
@@ -599,6 +619,16 @@ class PositionStatistics {
   }
 }
 
+let positionGoals : PositionGoal[] = []
+
+function plan() : void {
+}
+
+function advanceGoals () : void {
+  positionGoals.forEach(x => x.advance())
+}
+
 function play () : void {
+  advanceGoals()
   autoCombat()
 }
