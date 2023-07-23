@@ -43,6 +43,14 @@ class PlayerInfo {
 
 type Ownable = Flag | OwnedStructure | Creep
 
+function myOwnable (what: Ownable) : boolean {
+  return what.my === true
+}
+
+function enemyOwnable (what: Ownable) : boolean {
+  return what.my === false
+}
+
 function fillPlayerInfo (whoFunction: (x: Ownable) => boolean) : PlayerInfo {
   const playerInfo = new PlayerInfo()
 
@@ -56,17 +64,8 @@ let myPlayerInfo: PlayerInfo
 let enemyPlayerInfo: PlayerInfo
 
 function collectPlayerInfo () : void {
-  myPlayerInfo = fillPlayerInfo(
-    function my (what: Ownable) : boolean {
-      return what.my === true
-    }
-  )
-
-  enemyPlayerInfo = fillPlayerInfo(
-    function enemy (what: Ownable) : boolean {
-      return what.my === false
-    }
-  )
+  myPlayerInfo = fillPlayerInfo(myOwnable)
+  enemyPlayerInfo = fillPlayerInfo(enemyOwnable)
 }
 
 export function loop () : void {
@@ -623,6 +622,8 @@ class PositionStatistics {
 const positionGoals : PositionGoal[] = []
 
 function plan () : void {
+  const myFlag = allFlags().find(myOwnable)
+  const enemyFlag = allFlags().find(enemyOwnable)
 }
 
 function advanceGoals () : void {
