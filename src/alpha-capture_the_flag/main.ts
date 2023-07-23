@@ -423,6 +423,7 @@ class SingleCreepPositionGoal implements PositionGoal {
 
   advance(options?: FindPathOptions): CreepMoveResult {
     if (!operational(this.creep)) return ERR_NO_BODYPART
+    if (atSamePosition(this.creep as Position, this.position)) return OK
     return this.creep.moveTo(this.position, options)
   }
 }
