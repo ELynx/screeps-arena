@@ -4,6 +4,10 @@ import { Direction, FindPathOptions, getDirection, getObjectsByPrototype, getRan
 import { Visual } from 'game/visual'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
+// assumption, no constant given
+const MAP_SIDE_SIZE : number = 100
+const TICK_LIMIT : number = 2000
+
 function sortById (a: GameObject, b: GameObject) : number {
   return a.id.toString().localeCompare(b.id.toString())
 }
@@ -129,15 +133,18 @@ class StructureTowerScore {
   private calculateScore () : number {
     // speed up process
     if (this.range > TOWER_RANGE) return 0
+    return this.creep.my ? this.calculateScoreMy() : this.calculateScoreEnemy()
+  }
 
-    if (this.creep.my) {
-      const hitsLost = this.creep.hitsMax - this.creep.hits
-      const percent = hitsLost / this.creep.hitsMax * 100
-      const withFalloff = towerPower(percent, this.range)
+  private calculateScoreMy () : number {
+    const hitsLost = this.creep.hitsMax - this.creep.hits
+    const percent = hitsLost / this.creep.hitsMax * 100
+    const withFalloff = towerPower(percent, this.range)
 
-      return Math.round(withFalloff)
-    }
+    return Math.round(withFalloff)
+  }
 
+  private calculateScoreEnemy () : number {
     let bodyCost = 0
     for (const bodyPart of this.creep.body) {
       if (bodyPart.hits <= 0) continue
@@ -201,27 +208,36 @@ function operateTower (tower: StructureTower) : void {
   }
 }
 
-type Attackable = Creep | Structure
+type Attackable = Structure | Creep
 
 class AttackableAndRange {
   attackable: Attackable
   range: number
 
-  constructor (attackable: Attackable, range: number) {
+  constructor (creep: Creep, attackable: Attackable) {
     this.attackable = attackable
-    this.range = range
+    this.range = getRange(creep as Position, attackable as Position)
   }
 }
 
 function autoMelee (creep: Creep, attackables: Attackable[]) {
   if (!hasActiveBodyPart(creep, ATTACK)) return
 
-  const inRange = creep.findInRange(attackables, 1)
-  if (inRange.length > 0) {
-    const target = inRange[0]
-    creep.attack(target)
-    new Visual().line(creep as Position, target as Position)
-  }
+  const inRange = attackables.map(
+    function (target: Attackable) : AttackableAndRange {
+      return new AttackableAndRange(creep, target)
+    }
+  ).filter(
+    function (target: AttackableAndRange) : boolean {
+      return target.range <= 1
+    }
+  )
+
+  if (inRange.length === 0) return
+
+  const target = inRange[0].attackable
+  creep.attack(target)
+  new Visual().line(creep as Position, target as Position)
 }
 
 function rangedMassAttackPower (target: AttackableAndRange) : number {
@@ -233,8 +249,7 @@ function autoRanged (creep: Creep, attackables: Attackable[]) {
 
   const inRange = attackables.map(
     function (target: Attackable) : AttackableAndRange {
-      const range = getRange(creep as Position, target as Position)
-      return new AttackableAndRange(target, range)
+      return new AttackableAndRange(creep, target)
     }
   ).filter(
     function (target: AttackableAndRange) : boolean {
@@ -265,8 +280,7 @@ function autoHeal (creep: Creep, healables: Creep[]) {
 
   const inRange = healables.map(
     function (target: Creep) : AttackableAndRange {
-      const range = getRange(creep as Position, target as Position)
-      return new AttackableAndRange(target, range)
+      return new AttackableAndRange(creep, target)
     }
   ).filter(
     function (target: AttackableAndRange) : boolean {
@@ -300,9 +314,13 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
 function autoCombat () {
   myPlayerInfo.towers.filter(operational).forEach(operateTower)
 
-  const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
-  const enemyTowers = enemyPlayerInfo.towers.filter(operational)
-  const enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
+  // attacking towers is possible, but not practical
+  // const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
+  // const enemyTowers = enemyPlayerInfo.towers.filter(operational)
+  // const enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
+
+  // attack only enemy creeps
+  const enemyAttackables = enemyPlayerInfo.creeps.filter(operational)
 
   const myCreeps = myPlayerInfo.creeps.filter(operational)
   const myHealableCreeps = myCreeps.filter(notMaxHits)
@@ -348,17 +366,17 @@ class CreepLine {
     if (this.creeps.length === 1) return [OK, this.creeps[0]]
 
     for (let i = 0; i < this.creeps.length - 1; ++i) {
-      const creep = this.creeps[i]
+      const current = this.creeps[i]
       const next = this.creeps[i + 1]
 
-      const range = getRange(creep as Position, next as Position)
+      const range = getRange(current as Position, next as Position)
 
       if (range === 1) {
         // just a step
-        const direction = getDirectionByPosition(creep as Position, next as Position)
-        creep.move(direction!) // because range 1 should work
+        const direction = getDirectionByPosition(current as Position, next as Position)
+        current.move(direction!) // because range 1 should work
       } else if (range > 1) {
-        creep.moveTo(next as Position, options)
+        current.moveTo(next as Position, options)
         // give time to catch up
         return [ERR_TIRED, undefined]
       } else {
@@ -367,7 +385,7 @@ class CreepLine {
       }
     }
 
-    // give head for command
+    // return head for command
     return [OK, this.creeps[this.creeps.length - 1]]
   }
 
@@ -386,12 +404,123 @@ class CreepLine {
 }
 
 interface PositionGoal {
-  advance () : CreepMoveResult
+  advance (options?: FindPathOptions) : CreepMoveResult
 }
 
 class GridPositionGoal implements PositionGoal {
-  advance(): CreepMoveResult {
-    return ERR_INVALID_ARGS
+  creeps: Creep[]
+  positions: Position[]
+
+  private constructor () {
+    this.creeps = []
+    this.positions = []
+  }
+
+  advance (options?: FindPathOptions): CreepMoveResult {
+    // error case
+    if (this.creeps.length !== this.positions.length) return ERR_INVALID_ARGS
+
+    // elimination case
+    if (!this.creeps.some(operational)) return ERR_NO_BODYPART
+
+    let totalRc : CreepMoveResult = OK
+
+    for (let i = 0; i < this.creeps.length; ++i) {
+      const creep = this.creeps[i]
+      const position = this.positions[i]
+      const oneRc = this.advanceOne(creep, position, options)
+      if (oneRc < totalRc) totalRc = oneRc // less than because error codes are negatives
+    }
+
+    return totalRc
+  }
+
+  private advanceOne (creep: Creep, position: Position, options?: FindPathOptions) : CreepMoveResult {
+    if (!operational(creep)) return OK // fallback for the fallen, overall group is OK
+    if (atSamePosition(creep as Position, position)) return OK
+    return creep.moveTo(position, options)
+  }
+
+  public static Builder = class{
+    anchor: Position
+    built: GridPositionGoal
+
+    private constructor (anchor: Position) {
+      this.anchor = anchor
+      this.built = new GridPositionGoal()
+    }
+
+    static around (position: Position) {
+      return new GridPositionGoal.Builder(position)
+    }
+
+    with (creep: Creep, position: Position) {
+      this.built.creeps.push(creep)
+      this.built.positions.push(position)
+      return this
+    }
+
+    rotate0 () {
+      return this
+    }
+
+    rotate90 () {
+      this.rotateImpl(0, -1, 1, 0)
+      return this
+    }
+
+    rotate180 () {
+      this.rotateImpl(-1, 0, -1, 0)
+      return this
+    }
+
+    rotate270 () {
+      this.rotateImpl(0, 1, -1, 0)
+      return this
+    }
+
+    // . x ------>
+    // y 0    90 
+    // | 270 180
+    // v
+    autoRotate () {
+      const half = Math.round(MAP_SIDE_SIZE / 2)
+
+      if (this.anchor.x < half) {
+        if (this.anchor.y < half) {
+          return this.rotate0()
+        } else {
+          return this.rotate270()
+        }
+      } else {
+        if (this.anchor.y < half) {
+          return this.rotate90()
+        } else {
+          return this.rotate180()
+        }
+      }
+    }
+
+    private rotateImpl(x2x: number, y2x: number, x2y: number, y2y: number) {
+      for (let position of this.built.positions) {
+        const x = position.x * x2x + position.y * y2x
+        const y = position.x * x2y + position.y * y2y
+        // for whatever weirdness that may follow
+        position.x = Math.round(x)
+        position.y = Math.round(y)
+      }
+    }
+
+    build () : GridPositionGoal {
+      for (let position of this.built.positions) {
+        const x = this.anchor.x + position.x
+        const y = this.anchor.y + position.y
+        position.x = x
+        position.y = y
+      }
+
+      return this.built
+    }
   }
 }
 
@@ -404,8 +533,8 @@ class LinePositionGoal implements PositionGoal {
     this.position = position
   }
 
-  advance(): CreepMoveResult {
-    return this.creepLine.moveTo(this.position)
+  advance(options?: FindPathOptions): CreepMoveResult {
+    return this.creepLine.moveTo(this.position, options)
   }
 }
 
@@ -429,9 +558,8 @@ class PositionStatistics {
 
     if (this.numberOfCreeps === 0) return
 
-    const ticksLimit = 2000 // TODO arena info
     const ticksNow = getTicks()
-    const ticksRemaining = ticksLimit - ticksNow
+    const ticksRemaining = TICK_LIMIT - ticksNow
 
     // for median
     const sorted = ranges.sort()
@@ -467,7 +595,7 @@ class PositionStatistics {
   }
 
   toString () : string {
-    return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] avg [${this.average}] mdn [${this.median}] reach [${this.canReach}] `
+    return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] average [${this.average}] median [${this.median}] reach [${this.canReach}] `
   }
 }
 
