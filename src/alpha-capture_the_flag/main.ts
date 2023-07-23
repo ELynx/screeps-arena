@@ -1,6 +1,6 @@
 import { Creep, CreepMoveResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
 import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS } from 'game/constants'
-import { Direction, FindPathOptions, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
+import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Visual } from 'game/visual'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
@@ -462,6 +462,15 @@ class Rotator {
       position.y = Math.round(y)
     }
   }
+
+  protected build () {
+    for (const position of this.positions) {
+      const x = this.anchor.x + position.x
+      const y = this.anchor.y + position.y
+      position.x = x
+      position.y = y
+    }
+  }
 }
 
 interface PositionGoal {
@@ -527,14 +536,19 @@ class GridPositionGoalBuilder extends Rotator {
     this.creeps = []
   }
 
-  static around (position: Position) {
+  static around (position: Position) : GridPositionGoalBuilder{
     return new GridPositionGoalBuilder(position)
   }
 
-  with (creep: Creep, position: Position) {
+  with (creep: Creep, position: Position) : GridPositionGoalBuilder{
     this.creeps.push(creep)
     this.positions.push(position)
     return this
+  }
+
+  withXY (creep: Creep, x: number, y: number) : GridPositionGoalBuilder {
+    const position = { x, y } as Position
+    return this.with(creep, position)
   }
 
   public rotate0(): GridPositionGoalBuilder {
@@ -562,14 +576,8 @@ class GridPositionGoalBuilder extends Rotator {
     return this
   }
 
-  build () : GridPositionGoal {
-    for (const position of this.positions) {
-      const x = this.anchor.x + position.x
-      const y = this.anchor.y + position.y
-      position.x = x
-      position.y = y
-    }
-
+  public build () : GridPositionGoal {
+    super.build()
     return new GridPositionGoal(this.creeps, this.positions)
   }
 }
@@ -649,48 +657,20 @@ class PositionStatistics {
   }
 }
 
-class CreepFilter extends Rotator {
-  private constructor (anchor: Position) {
-    super(anchor)
-  }
-
-  static around (position: Position) {
-    return new CreepFilter(position)
-  }
-
-  with (position: Position) {
-    this.positions.push(position)
-    return this
-  }
-
-  public rotate0(): CreepFilter {
-    super.rotate0()
-    return this
-  }
-
-  public rotate90(): CreepFilter {
-    super.rotate90()
-    return this
-  }
-
-  public rotate180(): CreepFilter {
-    super.rotate180()
-    return this
-  }
-
-  public rotate270(): CreepFilter {
-    super.rotate270()
-    return this
-  }
-
-  public autoRotate(): CreepFilter {
-    super.autoRotate()
-    return this
+class CreepFilter  {
+  bodyTypes: string[]
+  positions: Position[]
+  
+  constructor (bodyTypes: string[], positions: Position[]) {
+    this.bodyTypes = bodyTypes
+    this.positions = positions
   }
 
   // returns [found creeps in specified order, remainder]
   // uses all or nothing approach, if one requested is not found, all are dropped
   filter (creeps: Creep[]) : [Creep[], Creep[]] {
+    if (this.positions.length !== this.bodyTypes.length) return [[], creeps]
+
     let found : Creep[] = new Array(this.positions.length)
     let remainder : Creep[] = []
 
@@ -700,8 +680,12 @@ class CreepFilter extends Rotator {
       for (let i = 0; i < this.positions.length && positionNotFound; ++i) {
         const position = this.positions[i]
         if (atSamePosition(creep as Position, position)) {
-          found[i] = creep
-          positionNotFound = false
+          if (hasActiveBodyPart(creep, this.bodyTypes[i])) {
+            found[i] = creep
+            positionNotFound = false
+          } else {
+            return [[], creeps]
+          }
         }
       }
 
@@ -716,21 +700,153 @@ class CreepFilter extends Rotator {
   }
 }
 
-const positionGoals : PositionGoal[] = []
+class CreepFilterBuilder extends Rotator {
+  bodyTypes: string[]
 
-function plan () : void {
-  const myFlag = allFlags().find(myOwnable)
-  const enemyFlag = allFlags().find(enemyOwnable)
+  private constructor (anchor: Position) {
+    super(anchor)
+    this.bodyTypes = []
+  }
 
-  if (myFlag) {
-    const anchor = myFlag as Position
+  static around (position: Position) : CreepFilterBuilder {
+    return new CreepFilterBuilder(position)
+  }
 
-    const creepFilter = CreepFilter.around(anchor)
+  with (bodyType: string, position: Position) : CreepFilterBuilder {
+    this.bodyTypes.push(bodyType)
+    this.positions.push(position)
+    return this
+  }
+
+  withXY(bodyType: string, x: number, y: number) : CreepFilterBuilder {
+    const position = { x, y } as Position
+    return this.with(bodyType, position)
+  }
+
+  public rotate0(): CreepFilterBuilder {
+    super.rotate0()
+    return this
+  }
+
+  public rotate90(): CreepFilterBuilder {
+    super.rotate90()
+    return this
+  }
+
+  public rotate180(): CreepFilterBuilder {
+    super.rotate180()
+    return this
+  }
+
+  public rotate270(): CreepFilterBuilder {
+    super.rotate270()
+    return this
+  }
+
+  public autoRotate(): CreepFilterBuilder {
+    super.autoRotate()
+    return this
+  }
+
+  public build(): CreepFilter {
+    super.build()
+    return new CreepFilter(this.bodyTypes, this.positions)
   }
 }
 
+const unexpectedCreepsGoals : PositionGoal[] = []
+const rushWithTwoLines : PositionGoal[] = []
+const lightDefenceAndScout : PositionGoal[] = []
+const fullDefence : PositionGoal[] = []
+
+function handleUnexpectedCreeps (creeps: Creep[]) : void {
+  const enemyFlag = allFlags().find(enemyOwnable)
+
+  for (const creep of creeps) {
+    console.log('Unexpected creep ', creep)
+    if (enemyFlag) {
+      unexpectedCreepsGoals.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
+    }
+  }
+}
+
+function plan () : void {
+  const myFlag = allFlags().find(myOwnable)
+  if (myFlag === undefined) {
+    console.log('myFlag not found')
+    handleUnexpectedCreeps(myPlayerInfo.creeps)
+    return
+  }
+
+  const enemyFlag = allFlags().find(enemyOwnable)
+  if (enemyFlag === undefined) {
+    console.log('enemyFlag not found')
+    handleUnexpectedCreeps(myPlayerInfo.creeps)
+    return
+  }
+
+  // check if all expected creeps are in place
+  const myCreepsFilter = CreepFilterBuilder.around(myFlag as Position)
+  .withXY(ATTACK, 8 - 3, 7 - 3)
+  .withXY(ATTACK, 7 - 3, 8 - 2)
+  .withXY(RANGED_ATTACK, 8 - 3, 6 - 3)
+  .withXY(RANGED_ATTACK, 6 - 3, 8 - 3)
+  .withXY(RANGED_ATTACK, 8 - 3, 5 - 3)
+  .withXY(RANGED_ATTACK, 5 - 3, 8 - 3)
+  .withXY(RANGED_ATTACK, 8 - 3, 4 - 3)
+  .withXY(RANGED_ATTACK, 4 - 3, 8 - 3)
+  .withXY(HEAL, 8 - 3, 3 - 3)
+  .withXY(HEAL, 3 - 3, 8 - 3)
+  .withXY(HEAL, 8 - 3, 2 - 3)
+  .withXY(HEAL, 2 - 3, 8 - 3)
+  .withXY(HEAL, 8 - 3, 1 - 3)
+  .withXY(HEAL, 1 - 3, 8 - 3)
+  .autoRotate()
+  .build()
+
+  const [expected, unexpected] = myCreepsFilter.filter(myPlayerInfo.creeps)
+  if (expected.length === 0) {
+    console.log('Creeps are not on expected positions')
+    handleUnexpectedCreeps(myPlayerInfo.creeps)
+    return
+  }
+
+  if (unexpected.length > 0) {
+    console.log('Unexpected creeps detected')
+    handleUnexpectedCreeps(unexpected)
+  }
+
+  const line1Filter = CreepFilterBuilder.around(myFlag as Position)
+  .withXY(ATTACK, 8 - 3, 7 - 3)
+  .withXY(HEAL, 8 - 3, 3 - 3)
+  .withXY(RANGED_ATTACK, 8 - 3, 6 - 3)
+  .withXY(HEAL, 8 - 3, 2 - 3)
+  .withXY(RANGED_ATTACK, 8 - 3, 5 - 3)
+  .withXY(HEAL, 8 - 3, 1 - 3)
+  .withXY(RANGED_ATTACK, 8 - 3, 4 - 3)
+  .autoRotate()
+  .build()
+  const [line1] = line1Filter.filter(myPlayerInfo.creeps)
+  rushWithTwoLines.push(new LinePositionGoal(line1, enemyFlag as Position))
+
+  const line2Filter = CreepFilterBuilder.around(myFlag as Position)
+  .withXY(ATTACK, 7 - 3, 8 - 2)
+  .withXY(HEAL, 3 - 3, 8 - 3)
+  .withXY(RANGED_ATTACK, 6 - 3, 8 - 3)
+  .withXY(HEAL, 2 - 3, 8 - 3)
+  .withXY(RANGED_ATTACK, 5 - 3, 8 - 3)
+  .withXY(HEAL, 1 - 3, 8 - 3)
+  .withXY(RANGED_ATTACK, 4 - 3, 8 - 3)
+  .autoRotate()
+  .build()
+  const [line2] = line2Filter.filter(myPlayerInfo.creeps)
+  rushWithTwoLines.push(new LinePositionGoal(line2, enemyFlag as Position))
+
+  console.log('Planning complete at ' + getCpuTime())
+}
+
 function advanceGoals () : void {
-  positionGoals.forEach(x => x.advance())
+  unexpectedCreepsGoals.forEach(x => x.advance())
 }
 
 function play () : void {
