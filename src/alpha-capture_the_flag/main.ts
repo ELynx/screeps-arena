@@ -421,7 +421,7 @@ class SingleCreepPositionGoal implements PositionGoal {
     this.position = position
   }
 
-  advance(options?: FindPathOptions): CreepMoveResult {
+  advance (options?: FindPathOptions): CreepMoveResult {
     if (!operational(this.creep)) return ERR_NO_BODYPART
     if (atSamePosition(this.creep as Position, this.position)) return OK
     return this.creep.moveTo(this.position, options)
@@ -462,7 +462,7 @@ class GridPositionGoal implements PositionGoal {
     return creep.moveTo(position, options)
   }
 
-  public static Builder = class{
+  public static Builder = class {
     anchor: Position
     built: GridPositionGoal
 
@@ -501,7 +501,7 @@ class GridPositionGoal implements PositionGoal {
     }
 
     // . x ------>
-    // y 0    90 
+    // y 0    90
     // | 270 180
     // v
     autoRotate () {
@@ -522,8 +522,8 @@ class GridPositionGoal implements PositionGoal {
       }
     }
 
-    private rotateImpl(x2x: number, y2x: number, x2y: number, y2y: number) {
-      for (let position of this.built.positions) {
+    private rotateImpl (x2x: number, y2x: number, x2y: number, y2y: number) {
+      for (const position of this.built.positions) {
         const x = position.x * x2x + position.y * y2x
         const y = position.x * x2y + position.y * y2y
         // for whatever weirdness that may follow
@@ -533,7 +533,7 @@ class GridPositionGoal implements PositionGoal {
     }
 
     build () : GridPositionGoal {
-      for (let position of this.built.positions) {
+      for (const position of this.built.positions) {
         const x = this.anchor.x + position.x
         const y = this.anchor.y + position.y
         position.x = x
@@ -554,7 +554,7 @@ class LinePositionGoal implements PositionGoal {
     this.position = position
   }
 
-  advance(options?: FindPathOptions): CreepMoveResult {
+  advance (options?: FindPathOptions): CreepMoveResult {
     return this.creepLine.moveTo(this.position, options)
   }
 }
@@ -605,13 +605,13 @@ class PositionStatistics {
         return getRange(position, creep as Position)
       }
     )
-  
+
     return new PositionStatistics(ranges)
   }
 
   static forCreepsAndFlag (creeps: Creep[], flag?: Flag) : PositionStatistics {
     if (!exists(flag)) return new PositionStatistics([])
-  
+
     return PositionStatistics.forCreepsAndPosition(creeps, flag! as Position)
   }
 
@@ -620,9 +620,9 @@ class PositionStatistics {
   }
 }
 
-let positionGoals : PositionGoal[] = []
+const positionGoals : PositionGoal[] = []
 
-function plan() : void {
+function plan () : void {
 }
 
 function advanceGoals () : void {
