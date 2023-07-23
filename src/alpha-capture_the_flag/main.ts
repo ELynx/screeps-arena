@@ -407,6 +407,63 @@ class CreepLine {
   }
 }
 
+class Rotator {
+  protected anchor: Position
+  protected positions: Position[]
+
+  protected constructor (anchor: Position) {
+    this.anchor = anchor
+    this.positions = []
+  }
+
+  protected rotate0 () {
+  }
+
+  protected rotate90 () {
+    this.rotateImpl(0, -1, 1, 0)
+  }
+
+  protected rotate180 () {
+    this.rotateImpl(-1, 0, -1, 0)
+  }
+
+  protected rotate270 () {
+    this.rotateImpl(0, 1, -1, 0)
+  }
+
+  // . x ------>
+  // y 0    90
+  // | 270 180
+  // v
+  protected autoRotate () {
+    const half = Math.round(MAP_SIDE_SIZE / 2)
+
+    if (this.anchor.x < half) {
+      if (this.anchor.y < half) {
+        this.rotate0()
+      } else {
+        this.rotate270()
+      }
+    } else {
+      if (this.anchor.y < half) {
+        this.rotate90()
+      } else {
+        this.rotate180()
+      }
+    }
+  }
+
+  private rotateImpl (x2x: number, y2x: number, x2y: number, y2y: number) {
+    for (const position of this.positions) {
+      const x = position.x * x2x + position.y * y2x
+      const y = position.x * x2y + position.y * y2y
+      // for whatever weirdness that may follow
+      position.x = Math.round(x)
+      position.y = Math.round(y)
+    }
+  }
+}
+
 interface PositionGoal {
   advance (options?: FindPathOptions) : CreepMoveResult
 }
@@ -431,9 +488,9 @@ class GridPositionGoal implements PositionGoal {
   creeps: Creep[]
   positions: Position[]
 
-  private constructor () {
-    this.creeps = []
-    this.positions = []
+  constructor (creeps: Creep[], positions: Position[]) {
+    this.creeps = creeps
+    this.positions = positions
   }
 
   advance (options?: FindPathOptions): CreepMoveResult {
@@ -460,87 +517,60 @@ class GridPositionGoal implements PositionGoal {
     if (atSamePosition(creep as Position, position)) return OK
     return creep.moveTo(position, options)
   }
+}
 
-  public static Builder = class {
-    anchor: Position
-    built: GridPositionGoal
+class GridPositionGoalBuilder extends Rotator {
+  creeps: Creep[]
 
-    private constructor (anchor: Position) {
-      this.anchor = anchor
-      this.built = new GridPositionGoal()
+  private constructor (anchor: Position) {
+    super(anchor)
+    this.creeps = []
+  }
+
+  static around (position: Position) {
+    return new GridPositionGoalBuilder(position)
+  }
+
+  with (creep: Creep, position: Position) {
+    this.creeps.push(creep)
+    this.positions.push(position)
+    return this
+  }
+
+  public rotate0(): GridPositionGoalBuilder {
+    super.rotate0()
+    return this
+  }
+
+  public rotate90(): GridPositionGoalBuilder {
+    super.rotate90()
+    return this
+  }
+
+  public rotate180(): GridPositionGoalBuilder {
+    super.rotate180()
+    return this
+  }
+
+  public rotate270(): GridPositionGoalBuilder {
+    super.rotate270()
+    return this
+  }
+
+  public autoRotate(): GridPositionGoalBuilder {
+    super.autoRotate()
+    return this
+  }
+
+  build () : GridPositionGoal {
+    for (const position of this.positions) {
+      const x = this.anchor.x + position.x
+      const y = this.anchor.y + position.y
+      position.x = x
+      position.y = y
     }
 
-    static around (position: Position) {
-      return new GridPositionGoal.Builder(position)
-    }
-
-    with (creep: Creep, position: Position) {
-      this.built.creeps.push(creep)
-      this.built.positions.push(position)
-      return this
-    }
-
-    rotate0 () {
-      return this
-    }
-
-    rotate90 () {
-      this.rotateImpl(0, -1, 1, 0)
-      return this
-    }
-
-    rotate180 () {
-      this.rotateImpl(-1, 0, -1, 0)
-      return this
-    }
-
-    rotate270 () {
-      this.rotateImpl(0, 1, -1, 0)
-      return this
-    }
-
-    // . x ------>
-    // y 0    90
-    // | 270 180
-    // v
-    autoRotate () {
-      const half = Math.round(MAP_SIDE_SIZE / 2)
-
-      if (this.anchor.x < half) {
-        if (this.anchor.y < half) {
-          return this.rotate0()
-        } else {
-          return this.rotate270()
-        }
-      } else {
-        if (this.anchor.y < half) {
-          return this.rotate90()
-        } else {
-          return this.rotate180()
-        }
-      }
-    }
-
-    private rotateImpl (x2x: number, y2x: number, x2y: number, y2y: number) {
-      for (const position of this.built.positions) {
-        const x = position.x * x2x + position.y * y2x
-        const y = position.x * x2y + position.y * y2y
-        // for whatever weirdness that may follow
-        position.x = Math.round(x)
-        position.y = Math.round(y)
-      }
-    }
-
-    build () : GridPositionGoal {
-      for (const position of this.built.positions) {
-        const x = this.anchor.x + position.x
-        const y = this.anchor.y + position.y
-        position.x = x
-        position.y = y
-      }
-
-      return this.built
-    }
+    return new GridPositionGoal(this.creeps, this.positions)
   }
 }
 
@@ -619,11 +649,84 @@ class PositionStatistics {
   }
 }
 
+class CreepFilter extends Rotator {
+  private constructor (anchor: Position) {
+    super(anchor)
+  }
+
+  static around (position: Position) {
+    return new CreepFilter(position)
+  }
+
+  with (position: Position) {
+    this.positions.push(position)
+    return this
+  }
+
+  public rotate0(): CreepFilter {
+    super.rotate0()
+    return this
+  }
+
+  public rotate90(): CreepFilter {
+    super.rotate90()
+    return this
+  }
+
+  public rotate180(): CreepFilter {
+    super.rotate180()
+    return this
+  }
+
+  public rotate270(): CreepFilter {
+    super.rotate270()
+    return this
+  }
+
+  public autoRotate(): CreepFilter {
+    super.autoRotate()
+    return this
+  }
+
+  // returns [found creeps in specified order, remainder]
+  // uses all or nothing approach, if one requested is not found, all are dropped
+  filter (creeps: Creep[]) : [Creep[], Creep[]] {
+    let found : Creep[] = new Array(this.positions.length)
+    let remainder : Creep[] = []
+
+    for (const creep of creeps) {
+      let positionNotFound = true
+
+      for (let i = 0; i < this.positions.length && positionNotFound; ++i) {
+        const position = this.positions[i]
+        if (atSamePosition(creep as Position, position)) {
+          found[i] = creep
+          positionNotFound = false
+        }
+      }
+
+      if (positionNotFound) remainder.push(creep)
+    }
+
+    for (const x of found) {
+      if (x === undefined) return [[], creeps]
+    }
+
+    return [found, remainder]
+  }
+}
+
 const positionGoals : PositionGoal[] = []
 
 function plan () : void {
   const myFlag = allFlags().find(myOwnable)
   const enemyFlag = allFlags().find(enemyOwnable)
+
+  if (myFlag) {
+    const anchor = myFlag as Position
+
+    const creepFilter = CreepFilter.around(anchor)
+  }
 }
 
 function advanceGoals () : void {
