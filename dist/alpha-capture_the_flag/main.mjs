@@ -347,7 +347,7 @@ class Rotator {
         this.rotateImpl(0, -1, 1, 0);
     }
     rotate180() {
-        this.rotateImpl(-1, 0, -1, 0);
+        this.rotateImpl(-1, 0, 0, -1);
     }
     rotate270() {
         this.rotateImpl(0, 1, -1, 0);
@@ -759,27 +759,27 @@ function advanceGoals() {
     const endspiel = getTicks() >= TICK_LIMIT - (MAP_SIDE_SIZE * 2);
     if (enemyAdvance.canReach === 0) {
         if (endspiel) {
-            console.log('rushRandomAll');
+            console.log('A. rushRandomAll');
             rushRandomAll.forEach(advance);
         }
         else {
-            console.log('rushWithTwoLines');
+            console.log('B. rushWithTwoLines');
             rushWithTwoLines.forEach(advance);
         }
         return;
     }
     const myDefence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, myFlag);
     if (enemyAdvance.min < enemyStartDistance && enemyAdvance.median <= myDefence.median) {
-        console.log('defenceGoals');
+        console.log('C. defenceGoals');
         defenceGoals.forEach(advance);
         return;
     }
     if (endspiel) {
-        console.log('rushRandomWithDoorstep');
+        console.log('D. rushRandomWithDoorstep');
         rushRandomWithDoorstep.forEach(advance);
     }
     else {
-        console.log('rushWithTwoLines');
+        console.log('E. rushWithTwoLines');
         rushWithTwoLines.forEach(advance);
     }
 }
