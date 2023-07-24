@@ -766,6 +766,7 @@ let enemyBaseline : number
 
 const unexpectedCreepsGoals : PositionGoal[] = []
 const rushWithTwoLines : PositionGoal[] = []
+const defence : PositionGoal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
@@ -861,6 +862,8 @@ function advanceGoals () : void {
     rushWithTwoLines.forEach(advance)
     return
   }
+
+  defence.forEach(advance)
 }
 
 function play () : void {
