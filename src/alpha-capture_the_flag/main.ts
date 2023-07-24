@@ -477,6 +477,10 @@ interface PositionGoal {
   advance (options?: FindPathOptions) : CreepMoveResult
 }
 
+function advance (positionGoal: PositionGoal) : void {
+  positionGoal.advance()
+}
+
 class SingleCreepPositionGoal implements PositionGoal {
   creep: Creep
   position: Position
@@ -754,14 +758,16 @@ class CreepFilterBuilder extends Rotator {
   }
 }
 
+let myFlag : Flag
+let enemyFlag : Flag
+
+let myBaseline : number
+let enemyBaseline : number
+
 const unexpectedCreepsGoals : PositionGoal[] = []
 const rushWithTwoLines : PositionGoal[] = []
-const lightDefenceAndScout : PositionGoal[] = []
-const fullDefence : PositionGoal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
-  const enemyFlag = allFlags().find(enemyOwnable)
-
   for (const creep of creeps) {
     console.log('Unexpected creep ', creep)
     if (enemyFlag) {
@@ -771,14 +777,14 @@ function handleUnexpectedCreeps (creeps: Creep[]) : void {
 }
 
 function plan () : void {
-  const myFlag = allFlags().find(myOwnable)
+  myFlag = allFlags().find(myOwnable)
   if (myFlag === undefined) {
     console.log('myFlag not found')
     handleUnexpectedCreeps(myPlayerInfo.creeps)
     return
   }
 
-  const enemyFlag = allFlags().find(enemyOwnable)
+  enemyFlag = allFlags().find(enemyOwnable)
   if (enemyFlag === undefined) {
     console.log('enemyFlag not found')
     handleUnexpectedCreeps(myPlayerInfo.creeps)
@@ -846,7 +852,15 @@ function plan () : void {
 }
 
 function advanceGoals () : void {
-  unexpectedCreepsGoals.forEach(x => x.advance())
+  unexpectedCreepsGoals.forEach(advance)
+
+  if (myFlag === undefined || enemyFlag === undefined) return
+
+  const enemyAdvance = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag)
+  if (enemyAdvance.canReach === 0) {
+    rushWithTwoLines.forEach(advance)
+    return
+  }
 }
 
 function play () : void {
