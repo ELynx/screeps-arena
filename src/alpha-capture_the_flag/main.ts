@@ -439,7 +439,7 @@ class Rotator {
   }
 
   protected rotate180 () {
-    this.rotateImpl(-1, 0, -1, 0)
+    this.rotateImpl(-1, 0, 0, -1)
   }
 
   protected rotate270 () {
