@@ -932,7 +932,6 @@ function advanceGoals () : void {
     } else {
       rushRandomAll.forEach(advance)
     }
-
     return
   }
 
