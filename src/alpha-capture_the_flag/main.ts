@@ -934,8 +934,10 @@ function advanceGoals () : void {
 
   if (enemyAdvance.canReach === 0) {
     if (endspiel) {
+      console.log('rushRandomAll')
       rushRandomAll.forEach(advance)
     } else {
+      console.log('rushWithTwoLines')
       rushWithTwoLines.forEach(advance)
     }
     return
@@ -943,13 +945,16 @@ function advanceGoals () : void {
 
   const myDefence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, myFlag)
   if (enemyAdvance.min < enemyStartDistance && enemyAdvance.median <= myDefence.median) {
+    console.log('defenceGoals')
     defenceGoals.forEach(advance)
     return
   }
 
   if (endspiel) {
+    console.log('rushRandomWithDoorstep')
     rushRandomWithDoorstep.forEach(advance)
   } else {
+    console.log('rushWithTwoLines')
     rushWithTwoLines.forEach(advance)
   }
 }
