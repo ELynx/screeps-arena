@@ -794,8 +794,8 @@ class CreepFilterBuilder extends Rotator {
   }
 }
 
-let myFlag : Flag
-let enemyFlag : Flag
+let myFlag : Flag | undefined
+let enemyFlag : Flag | undefined
 
 let enemyStartDistance : number
 
