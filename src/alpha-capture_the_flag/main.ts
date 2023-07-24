@@ -341,10 +341,10 @@ class CreepLine {
 
   // head at index 0
   constructor (creeps: Creep[]) {
-    this.creeps = creeps
+    this.creeps = creeps.concat()
 
     // because head at index 0
-    this.creeps.reverse() // TODO fix, side effect
+    this.creeps.reverse()
   }
 
   move (direction: Direction) : CreepMoveResult {
