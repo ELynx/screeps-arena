@@ -761,11 +761,11 @@ class CreepFilterBuilder extends Rotator {
 let myFlag : Flag
 let enemyFlag : Flag
 
-let myBaseline : number
 let enemyBaseline : number
 
 const unexpectedCreepsGoals : PositionGoal[] = []
 const rushWithTwoLines : PositionGoal[] = []
+const rushRandom : PositionGoal[] = []
 const defence : PositionGoal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
@@ -823,6 +823,12 @@ function plan () : void {
     handleUnexpectedCreeps(unexpected)
   }
 
+  expected.forEach(
+    function (creep: Creep) : void {
+      rushRandom.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
+    }
+  )
+
   const line1Filter = CreepFilterBuilder.around(myFlag as Position)
     .withXY(ATTACK, 8 - 3, 7 - 3)
     .withXY(HEAL, 8 - 3, 3 - 3)
@@ -857,10 +863,21 @@ function advanceGoals () : void {
 
   if (myFlag === undefined || enemyFlag === undefined) return
 
+  const ticks = getTicks()
+
   const enemyAdvance = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag)
   if (enemyAdvance.canReach === 0) {
-    rushWithTwoLines.forEach(advance)
+    if (ticks < TICK_LIMIT - (MAP_SIDE_SIZE * 2)) {
+      rushWithTwoLines.forEach(advance)
+    } else {
+      rushRandom.forEach(advance)
+    }
+
     return
+  }
+
+  if (enemyBaseline === undefined) {
+    enemyBaseline = enemyAdvance.min
   }
 
   defence.forEach(advance)
