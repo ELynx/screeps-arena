@@ -536,11 +536,11 @@ class GridPositionGoalBuilder extends Rotator {
     this.creeps = []
   }
 
-  static around (position: Position) : GridPositionGoalBuilder{
+  static around (position: Position) : GridPositionGoalBuilder {
     return new GridPositionGoalBuilder(position)
   }
 
-  with (creep: Creep, position: Position) : GridPositionGoalBuilder{
+  with (creep: Creep, position: Position) : GridPositionGoalBuilder {
     this.creeps.push(creep)
     this.positions.push(position)
     return this
@@ -551,27 +551,27 @@ class GridPositionGoalBuilder extends Rotator {
     return this.with(creep, position)
   }
 
-  public rotate0(): GridPositionGoalBuilder {
+  public rotate0 (): GridPositionGoalBuilder {
     super.rotate0()
     return this
   }
 
-  public rotate90(): GridPositionGoalBuilder {
+  public rotate90 (): GridPositionGoalBuilder {
     super.rotate90()
     return this
   }
 
-  public rotate180(): GridPositionGoalBuilder {
+  public rotate180 (): GridPositionGoalBuilder {
     super.rotate180()
     return this
   }
 
-  public rotate270(): GridPositionGoalBuilder {
+  public rotate270 (): GridPositionGoalBuilder {
     super.rotate270()
     return this
   }
 
-  public autoRotate(): GridPositionGoalBuilder {
+  public autoRotate (): GridPositionGoalBuilder {
     super.autoRotate()
     return this
   }
@@ -657,10 +657,10 @@ class PositionStatistics {
   }
 }
 
-class CreepFilter  {
+class CreepFilter {
   bodyTypes: string[]
   positions: Position[]
-  
+
   constructor (bodyTypes: string[], positions: Position[]) {
     this.bodyTypes = bodyTypes
     this.positions = positions
@@ -671,8 +671,8 @@ class CreepFilter  {
   filter (creeps: Creep[]) : [Creep[], Creep[]] {
     if (this.positions.length !== this.bodyTypes.length) return [[], creeps]
 
-    let found : Creep[] = new Array(this.positions.length)
-    let remainder : Creep[] = []
+    const found : Creep[] = new Array(this.positions.length)
+    const remainder : Creep[] = []
 
     for (const creep of creeps) {
       let positionNotFound = true
@@ -718,37 +718,37 @@ class CreepFilterBuilder extends Rotator {
     return this
   }
 
-  withXY(bodyType: string, x: number, y: number) : CreepFilterBuilder {
+  withXY (bodyType: string, x: number, y: number) : CreepFilterBuilder {
     const position = { x, y } as Position
     return this.with(bodyType, position)
   }
 
-  public rotate0(): CreepFilterBuilder {
+  public rotate0 (): CreepFilterBuilder {
     super.rotate0()
     return this
   }
 
-  public rotate90(): CreepFilterBuilder {
+  public rotate90 (): CreepFilterBuilder {
     super.rotate90()
     return this
   }
 
-  public rotate180(): CreepFilterBuilder {
+  public rotate180 (): CreepFilterBuilder {
     super.rotate180()
     return this
   }
 
-  public rotate270(): CreepFilterBuilder {
+  public rotate270 (): CreepFilterBuilder {
     super.rotate270()
     return this
   }
 
-  public autoRotate(): CreepFilterBuilder {
+  public autoRotate (): CreepFilterBuilder {
     super.autoRotate()
     return this
   }
 
-  public build(): CreepFilter {
+  public build (): CreepFilter {
     super.build()
     return new CreepFilter(this.bodyTypes, this.positions)
   }
@@ -787,22 +787,22 @@ function plan () : void {
 
   // check if all expected creeps are in place
   const myCreepsFilter = CreepFilterBuilder.around(myFlag as Position)
-  .withXY(ATTACK, 8 - 3, 7 - 3)
-  .withXY(ATTACK, 7 - 3, 8 - 2)
-  .withXY(RANGED_ATTACK, 8 - 3, 6 - 3)
-  .withXY(RANGED_ATTACK, 6 - 3, 8 - 3)
-  .withXY(RANGED_ATTACK, 8 - 3, 5 - 3)
-  .withXY(RANGED_ATTACK, 5 - 3, 8 - 3)
-  .withXY(RANGED_ATTACK, 8 - 3, 4 - 3)
-  .withXY(RANGED_ATTACK, 4 - 3, 8 - 3)
-  .withXY(HEAL, 8 - 3, 3 - 3)
-  .withXY(HEAL, 3 - 3, 8 - 3)
-  .withXY(HEAL, 8 - 3, 2 - 3)
-  .withXY(HEAL, 2 - 3, 8 - 3)
-  .withXY(HEAL, 8 - 3, 1 - 3)
-  .withXY(HEAL, 1 - 3, 8 - 3)
-  .autoRotate()
-  .build()
+    .withXY(ATTACK, 8 - 3, 7 - 3)
+    .withXY(ATTACK, 7 - 3, 8 - 2)
+    .withXY(RANGED_ATTACK, 8 - 3, 6 - 3)
+    .withXY(RANGED_ATTACK, 6 - 3, 8 - 3)
+    .withXY(RANGED_ATTACK, 8 - 3, 5 - 3)
+    .withXY(RANGED_ATTACK, 5 - 3, 8 - 3)
+    .withXY(RANGED_ATTACK, 8 - 3, 4 - 3)
+    .withXY(RANGED_ATTACK, 4 - 3, 8 - 3)
+    .withXY(HEAL, 8 - 3, 3 - 3)
+    .withXY(HEAL, 3 - 3, 8 - 3)
+    .withXY(HEAL, 8 - 3, 2 - 3)
+    .withXY(HEAL, 2 - 3, 8 - 3)
+    .withXY(HEAL, 8 - 3, 1 - 3)
+    .withXY(HEAL, 1 - 3, 8 - 3)
+    .autoRotate()
+    .build()
 
   const [expected, unexpected] = myCreepsFilter.filter(myPlayerInfo.creeps)
   if (expected.length === 0) {
@@ -817,28 +817,28 @@ function plan () : void {
   }
 
   const line1Filter = CreepFilterBuilder.around(myFlag as Position)
-  .withXY(ATTACK, 8 - 3, 7 - 3)
-  .withXY(HEAL, 8 - 3, 3 - 3)
-  .withXY(RANGED_ATTACK, 8 - 3, 6 - 3)
-  .withXY(HEAL, 8 - 3, 2 - 3)
-  .withXY(RANGED_ATTACK, 8 - 3, 5 - 3)
-  .withXY(HEAL, 8 - 3, 1 - 3)
-  .withXY(RANGED_ATTACK, 8 - 3, 4 - 3)
-  .autoRotate()
-  .build()
+    .withXY(ATTACK, 8 - 3, 7 - 3)
+    .withXY(HEAL, 8 - 3, 3 - 3)
+    .withXY(RANGED_ATTACK, 8 - 3, 6 - 3)
+    .withXY(HEAL, 8 - 3, 2 - 3)
+    .withXY(RANGED_ATTACK, 8 - 3, 5 - 3)
+    .withXY(HEAL, 8 - 3, 1 - 3)
+    .withXY(RANGED_ATTACK, 8 - 3, 4 - 3)
+    .autoRotate()
+    .build()
   const [line1] = line1Filter.filter(myPlayerInfo.creeps)
   rushWithTwoLines.push(new LinePositionGoal(line1, enemyFlag as Position))
 
   const line2Filter = CreepFilterBuilder.around(myFlag as Position)
-  .withXY(ATTACK, 7 - 3, 8 - 2)
-  .withXY(HEAL, 3 - 3, 8 - 3)
-  .withXY(RANGED_ATTACK, 6 - 3, 8 - 3)
-  .withXY(HEAL, 2 - 3, 8 - 3)
-  .withXY(RANGED_ATTACK, 5 - 3, 8 - 3)
-  .withXY(HEAL, 1 - 3, 8 - 3)
-  .withXY(RANGED_ATTACK, 4 - 3, 8 - 3)
-  .autoRotate()
-  .build()
+    .withXY(ATTACK, 7 - 3, 8 - 2)
+    .withXY(HEAL, 3 - 3, 8 - 3)
+    .withXY(RANGED_ATTACK, 6 - 3, 8 - 3)
+    .withXY(HEAL, 2 - 3, 8 - 3)
+    .withXY(RANGED_ATTACK, 5 - 3, 8 - 3)
+    .withXY(HEAL, 1 - 3, 8 - 3)
+    .withXY(RANGED_ATTACK, 4 - 3, 8 - 3)
+    .autoRotate()
+    .build()
   const [line2] = line2Filter.filter(myPlayerInfo.creeps)
   rushWithTwoLines.push(new LinePositionGoal(line2, enemyFlag as Position))
 
