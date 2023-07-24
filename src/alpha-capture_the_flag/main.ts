@@ -241,7 +241,7 @@ function autoMelee (creep: Creep, attackables: Attackable[]) {
 
   const target = inRange[0].attackable
   creep.attack(target)
-  new Visual().line(creep as Position, target as Position, { color: "#f93842" as Color } as LineVisualStyle)
+  new Visual().line(creep as Position, target as Position, { color: '#f93842' as Color } as LineVisualStyle)
 }
 
 function rangedMassAttackPower (target: AttackableAndRange) : number {
@@ -302,7 +302,7 @@ function autoHeal (creep: Creep, healables: Creep[]) {
   if (inTouch !== undefined) {
     const target = inTouch.attackable as Creep
     creep.heal(target)
-    new Visual().line(creep as Position, target as Position, { color: "#65fd62" as Color } as LineVisualStyle)
+    new Visual().line(creep as Position, target as Position, { color: '#65fd62' as Color } as LineVisualStyle)
   } else {
     const target = inRange[0].attackable as Creep
     creep.rangedHeal(target)
