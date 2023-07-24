@@ -339,8 +339,12 @@ function autoCombat () {
 class CreepLine {
   creeps: Creep[]
 
+  // head at index 0
   constructor (creeps: Creep[]) {
     this.creeps = creeps
+
+    // because head at index 0
+    this.creeps.reverse()
   }
 
   move (direction: Direction) : CreepMoveResult {
@@ -409,11 +413,22 @@ class CreepLine {
 
 class Rotator {
   protected anchor: Position
+  protected offset: Position
   protected positions: Position[]
 
   protected constructor (anchor: Position) {
     this.anchor = anchor
+    this.offset = { x: 0, y: 0 } as Position
     this.positions = []
+  }
+
+  protected setOffset (offset: Position) {
+    this.offset = offset
+  }
+
+  protected with (position: Position) {
+    const shifted = { x: position.x + this.offset.x, y: position.y + this.offset.y }
+    this.positions.push(shifted)
   }
 
   protected rotate0 () {
@@ -544,15 +559,26 @@ class GridPositionGoalBuilder extends Rotator {
     return new GridPositionGoalBuilder(position)
   }
 
-  with (creep: Creep, position: Position) : GridPositionGoalBuilder {
-    this.creeps.push(creep)
-    this.positions.push(position)
+  public setOffset (offset: Position): GridPositionGoalBuilder {
+    super.setOffset(offset)
     return this
   }
 
-  withXY (creep: Creep, x: number, y: number) : GridPositionGoalBuilder {
+  public setOffsetXY (x: number, y: number) : GridPositionGoalBuilder {
     const position = { x, y } as Position
-    return this.with(creep, position)
+    super.setOffset(position)
+    return this
+  }
+
+  public withCreepToPosition (creep: Creep, position: Position) : GridPositionGoalBuilder {
+    this.creeps.push(creep)
+    super.with(position)
+    return this
+  }
+
+  public withCreepToXY (creep: Creep, x: number, y: number) : GridPositionGoalBuilder {
+    const position = { x, y } as Position
+    return this.withCreepToPosition(creep, position)
   }
 
   public rotate0 (): GridPositionGoalBuilder {
@@ -716,15 +742,25 @@ class CreepFilterBuilder extends Rotator {
     return new CreepFilterBuilder(position)
   }
 
-  with (bodyType: string, position: Position) : CreepFilterBuilder {
-    this.bodyTypes.push(bodyType)
-    this.positions.push(position)
+  public setOffset (offset: Position): CreepFilterBuilder {
+    super.setOffset(offset)
     return this
   }
 
-  withXY (bodyType: string, x: number, y: number) : CreepFilterBuilder {
+  public setOffsetXY (x: number, y: number) {
     const position = { x, y } as Position
-    return this.with(bodyType, position)
+    return this.setOffset(position)
+  }
+
+  public withBodyTypeAtPosition (bodyType: string, position: Position) : CreepFilterBuilder {
+    this.bodyTypes.push(bodyType)
+    super.with(position)
+    return this
+  }
+
+  public withBodyTypeAtXY (bodyType: string, x: number, y: number) : CreepFilterBuilder {
+    const position = { x, y } as Position
+    return this.withBodyTypeAtPosition(bodyType, position)
   }
 
   public rotate0 (): CreepFilterBuilder {
@@ -762,9 +798,9 @@ let myFlag : Flag
 let enemyFlag : Flag
 
 const unexpectedCreepsGoals : PositionGoal[] = []
+const defence : PositionGoal[] = []
 const rushRandom : PositionGoal[] = []
 const rushWithTwoLines : PositionGoal[] = []
-const defence : PositionGoal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
@@ -792,20 +828,21 @@ function plan () : void {
 
   // check if all expected creeps are in place
   const myCreepsFilter = CreepFilterBuilder.around(myFlag as Position)
-    .withXY(ATTACK, 8 - 3, 7 - 3)
-    .withXY(ATTACK, 7 - 3, 8 - 2)
-    .withXY(RANGED_ATTACK, 8 - 3, 6 - 3)
-    .withXY(RANGED_ATTACK, 6 - 3, 8 - 3)
-    .withXY(RANGED_ATTACK, 8 - 3, 5 - 3)
-    .withXY(RANGED_ATTACK, 5 - 3, 8 - 3)
-    .withXY(RANGED_ATTACK, 8 - 3, 4 - 3)
-    .withXY(RANGED_ATTACK, 4 - 3, 8 - 3)
-    .withXY(HEAL, 8 - 3, 3 - 3)
-    .withXY(HEAL, 3 - 3, 8 - 3)
-    .withXY(HEAL, 8 - 3, 2 - 3)
-    .withXY(HEAL, 2 - 3, 8 - 3)
-    .withXY(HEAL, 8 - 3, 1 - 3)
-    .withXY(HEAL, 1 - 3, 8 - 3)
+    .setOffsetXY(-3, -3)
+    .withBodyTypeAtXY(ATTACK, 8, 7)
+    .withBodyTypeAtXY(ATTACK, 7, 8)
+    .withBodyTypeAtXY(RANGED_ATTACK, 8, 6)
+    .withBodyTypeAtXY(RANGED_ATTACK, 6, 8)
+    .withBodyTypeAtXY(RANGED_ATTACK, 8, 5)
+    .withBodyTypeAtXY(RANGED_ATTACK, 5, 8)
+    .withBodyTypeAtXY(RANGED_ATTACK, 8, 4)
+    .withBodyTypeAtXY(RANGED_ATTACK, 4, 8)
+    .withBodyTypeAtXY(HEAL, 8, 3)
+    .withBodyTypeAtXY(HEAL, 3, 8)
+    .withBodyTypeAtXY(HEAL, 8, 2)
+    .withBodyTypeAtXY(HEAL, 2, 8)
+    .withBodyTypeAtXY(HEAL, 8, 1)
+    .withBodyTypeAtXY(HEAL, 1, 8)
     .autoRotate()
     .build()
 
@@ -828,26 +865,28 @@ function plan () : void {
   )
 
   const line1Filter = CreepFilterBuilder.around(myFlag as Position)
-    .withXY(ATTACK, 8 - 3, 7 - 3)
-    .withXY(HEAL, 8 - 3, 3 - 3)
-    .withXY(RANGED_ATTACK, 8 - 3, 6 - 3)
-    .withXY(HEAL, 8 - 3, 2 - 3)
-    .withXY(RANGED_ATTACK, 8 - 3, 5 - 3)
-    .withXY(HEAL, 8 - 3, 1 - 3)
-    .withXY(RANGED_ATTACK, 8 - 3, 4 - 3)
+    .setOffsetXY(-3, -3)
+    .withBodyTypeAtXY(ATTACK, 8, 7)
+    .withBodyTypeAtXY(HEAL, 8, 3)
+    .withBodyTypeAtXY(RANGED_ATTACK, 8, 6)
+    .withBodyTypeAtXY(HEAL, 8, 2)
+    .withBodyTypeAtXY(RANGED_ATTACK, 8, 5)
+    .withBodyTypeAtXY(HEAL, 8, 1)
+    .withBodyTypeAtXY(RANGED_ATTACK, 8, 4)
     .autoRotate()
     .build()
   const [line1] = line1Filter.filter(myPlayerInfo.creeps)
   rushWithTwoLines.push(new LinePositionGoal(line1, enemyFlag as Position))
 
   const line2Filter = CreepFilterBuilder.around(myFlag as Position)
-    .withXY(ATTACK, 7 - 3, 8 - 2)
-    .withXY(HEAL, 3 - 3, 8 - 3)
-    .withXY(RANGED_ATTACK, 6 - 3, 8 - 3)
-    .withXY(HEAL, 2 - 3, 8 - 3)
-    .withXY(RANGED_ATTACK, 5 - 3, 8 - 3)
-    .withXY(HEAL, 1 - 3, 8 - 3)
-    .withXY(RANGED_ATTACK, 4 - 3, 8 - 3)
+    .setOffsetXY(-3, -3)
+    .withBodyTypeAtXY(ATTACK, 7, 8)
+    .withBodyTypeAtXY(HEAL, 3, 8)
+    .withBodyTypeAtXY(RANGED_ATTACK, 6, 8)
+    .withBodyTypeAtXY(HEAL, 2, 8)
+    .withBodyTypeAtXY(RANGED_ATTACK, 5, 8)
+    .withBodyTypeAtXY(HEAL, 1, 8)
+    .withBodyTypeAtXY(RANGED_ATTACK, 4, 8)
     .autoRotate()
     .build()
   const [line2] = line2Filter.filter(myPlayerInfo.creeps)
