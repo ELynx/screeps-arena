@@ -193,7 +193,7 @@ function autoMelee(creep, attackables) {
         return;
     const target = inRange[0].attackable;
     creep.attack(target);
-    new Visual().line(creep, target);
+    new Visual().line(creep, target, { color: "#f93842" });
 }
 function rangedMassAttackPower(target) {
     return RANGED_ATTACK_POWER * (RANGED_ATTACK_DISTANCE_RATE[target.range] || 0);
@@ -215,7 +215,6 @@ function autoRanged(creep, attackables) {
     else {
         const target = inRange[0].attackable;
         creep.rangedAttack(target);
-        new Visual().line(creep, target);
     }
 }
 function autoHeal(creep, healables) {
@@ -236,12 +235,13 @@ function autoHeal(creep, healables) {
         return target.range <= 1;
     });
     if (inTouch !== undefined) {
-        creep.heal(inTouch.attackable);
+        const target = inTouch.attackable;
+        creep.heal(target);
+        new Visual().line(creep, target, { color: "#65fd62" });
     }
     else {
         const target = inRange[0].attackable;
         creep.rangedHeal(target);
-        new Visual().line(creep, target);
     }
 }
 function autoAll(creep, attackables, healables) {
@@ -266,7 +266,7 @@ function autoCombat() {
 class CreepLine {
     // head at index 0
     constructor(creeps) {
-        this.creeps = creeps;
+        this.creeps = creeps.concat();
         // because head at index 0
         this.creeps.reverse();
     }
@@ -731,19 +731,19 @@ function plan() {
     });
     defenceGoals.push(GridPositionGoalBuilder.around(myFlag)
         .setOffsetXY(-3, -3)
-        .withCreepToXY(line1Creeps[0], 1, 0)
-        .withCreepToXY(line1Creeps[1], 0, -1)
-        .withCreepToXY(line1Creeps[2], 1, -2)
-        .withCreepToXY(line1Creeps[3], 2, -1)
-        .withCreepToXY(line1Creeps[4], 3, -1)
-        .withCreepToXY(line1Creeps[5], 4, -1)
-        .withCreepToXY(line2Creeps[0], 0, 1)
-        .withCreepToXY(line2Creeps[1], -1, 0)
-        .withCreepToXY(line2Creeps[2], -2, 1)
-        .withCreepToXY(line2Creeps[3], -1, 2)
-        .withCreepToXY(line2Creeps[4], -1, 3)
-        .withCreepToXY(line2Creeps[5], -2, 3)
-        .withCreepToXY(line2Creeps[6], -1, 4)
+        .withCreepToXY(line1Creeps[0], 4, 3)
+        .withCreepToXY(line1Creeps[1], 3, 2)
+        .withCreepToXY(line1Creeps[2], 4, 1)
+        .withCreepToXY(line1Creeps[3], 5, 2)
+        .withCreepToXY(line1Creeps[4], 6, 2)
+        .withCreepToXY(line1Creeps[5], 7, 2)
+        .withCreepToXY(line2Creeps[0], 3, 4)
+        .withCreepToXY(line2Creeps[1], 2, 3)
+        .withCreepToXY(line2Creeps[2], 1, 4)
+        .withCreepToXY(line2Creeps[3], 2, 5)
+        .withCreepToXY(line2Creeps[4], 2, 6)
+        .withCreepToXY(line2Creeps[5], 1, 6)
+        .withCreepToXY(line2Creeps[6], 2, 7)
         .autoRotate()
         .build());
     console.log('Planning complete at ' + getCpuTime());
