@@ -798,9 +798,10 @@ let myFlag : Flag
 let enemyFlag : Flag
 
 const unexpectedCreepsGoals : PositionGoal[] = []
-const defence : PositionGoal[] = []
-const rushRandom : PositionGoal[] = []
+const defenceGoals : PositionGoal[] = []
 const rushWithTwoLines : PositionGoal[] = []
+const rushRandomWithDoorstep : PositionGoal[] = []
+const rushRandomAll : PositionGoal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
@@ -858,11 +859,17 @@ function plan () : void {
     handleUnexpectedCreeps(unexpected)
   }
 
-  expected.forEach(
-    function (creep: Creep) : void {
-      rushRandom.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
-    }
-  )
+  // TODO defence here
+
+  const doorstopFilter = CreepFilterBuilder.around(myFlag as Position)
+    .setOffsetXY(-3, -3)
+    .withBodyTypeAtXY(HEAL, 8, 1)
+    .autoRotate()
+    .build()
+  const [doorstopCreeps] = doorstopFilter.filter(myPlayerInfo.creeps)
+  const doorstep = new SingleCreepPositionGoal(doorstopCreeps[0], myFlag as Position)
+  rushWithTwoLines.push(doorstep)
+  rushRandomWithDoorstep.push(doorstep)
 
   const line1Filter = CreepFilterBuilder.around(myFlag as Position)
     .setOffsetXY(-3, -3)
@@ -871,12 +878,17 @@ function plan () : void {
     .withBodyTypeAtXY(RANGED_ATTACK, 8, 6)
     .withBodyTypeAtXY(HEAL, 8, 2)
     .withBodyTypeAtXY(RANGED_ATTACK, 8, 5)
-    .withBodyTypeAtXY(HEAL, 8, 1)
+    // doorstep was here
     .withBodyTypeAtXY(RANGED_ATTACK, 8, 4)
     .autoRotate()
     .build()
-  const [line1] = line1Filter.filter(myPlayerInfo.creeps)
-  rushWithTwoLines.push(new LinePositionGoal(line1, enemyFlag as Position))
+  const [line1Creeps] = line1Filter.filter(myPlayerInfo.creeps)
+  rushWithTwoLines.push(new LinePositionGoal(line1Creeps, enemyFlag as Position))
+  line1Creeps.forEach(
+    function (creep: Creep) : void {
+      rushRandomWithDoorstep.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
+    }
+  )
 
   const line2Filter = CreepFilterBuilder.around(myFlag as Position)
     .setOffsetXY(-3, -3)
@@ -889,8 +901,19 @@ function plan () : void {
     .withBodyTypeAtXY(RANGED_ATTACK, 4, 8)
     .autoRotate()
     .build()
-  const [line2] = line2Filter.filter(myPlayerInfo.creeps)
-  rushWithTwoLines.push(new LinePositionGoal(line2, enemyFlag as Position))
+  const [line2Creeps] = line2Filter.filter(myPlayerInfo.creeps)
+  rushWithTwoLines.push(new LinePositionGoal(line2Creeps, enemyFlag as Position))
+  line2Creeps.forEach(
+    function (creep: Creep) : void {
+      rushRandomWithDoorstep.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
+    }
+  )
+
+  expected.forEach(
+    function (creep: Creep) : void {
+      rushRandomAll.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
+    }
+  )
 
   console.log('Planning complete at ' + getCpuTime())
 }
@@ -907,7 +930,7 @@ function advanceGoals () : void {
     if (ticks < TICK_LIMIT - (MAP_SIDE_SIZE * 2)) {
       rushWithTwoLines.forEach(advance)
     } else {
-      rushRandom.forEach(advance)
+      rushRandomAll.forEach(advance)
     }
 
     return
@@ -915,14 +938,14 @@ function advanceGoals () : void {
 
   const myAdvance = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, enemyFlag)
   if (enemyAdvance.median > myAdvance.median) {
-    defence.forEach(advance)
+    defenceGoals.forEach(advance)
     return
   }
 
   if (ticks < TICK_LIMIT - (MAP_SIDE_SIZE * 2)) {
     rushWithTwoLines.forEach(advance)
   } else {
-    rushRandom.forEach(advance)
+    rushRandomWithDoorstep.forEach(advance)
   }
 }
 
