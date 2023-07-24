@@ -930,27 +930,27 @@ function advanceGoals () : void {
     enemyStartDistance = enemyAdvance.min
   }
 
-  const ticks = getTicks()
+  const endspiel : boolean = getTicks() >= TICK_LIMIT - (MAP_SIDE_SIZE * 2)
 
   if (enemyAdvance.canReach === 0) {
-    if (ticks < TICK_LIMIT - (MAP_SIDE_SIZE * 2)) {
-      rushWithTwoLines.forEach(advance)
-    } else {
+    if (endspiel) {
       rushRandomAll.forEach(advance)
+    } else {
+      rushWithTwoLines.forEach(advance)
     }
     return
   }
 
   const myDefence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, myFlag)
-  if (enemyAdvance.median <= myDefence.median) {
+  if (enemyAdvance.min < enemyStartDistance && enemyAdvance.median <= myDefence.median) {
     defenceGoals.forEach(advance)
     return
   }
 
-  if (ticks < TICK_LIMIT - (MAP_SIDE_SIZE * 2)) {
-    rushWithTwoLines.forEach(advance)
-  } else {
+  if (endspiel) {
     rushRandomWithDoorstep.forEach(advance)
+  } else {
+    rushWithTwoLines.forEach(advance)
   }
 }
 
