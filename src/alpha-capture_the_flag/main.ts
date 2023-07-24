@@ -801,9 +801,9 @@ let enemyStartDistance : number
 
 const unexpectedCreepsGoals : PositionGoal[] = []
 const rushRandomAll : PositionGoal[] = []
-const defenceGoals : PositionGoal[] = []
 const rushWithTwoLines : PositionGoal[] = []
 const rushRandomWithDoorstep : PositionGoal[] = []
+const defenceGoals : PositionGoal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
@@ -874,48 +874,9 @@ function plan () : void {
     .build()
   const [doorstopCreeps] = doorstopFilter.filter(myPlayerInfo.creeps)
   const doorstep = new SingleCreepPositionGoal(doorstopCreeps[0], myFlag as Position)
-  defenceGoals.push(doorstep)
   rushWithTwoLines.push(doorstep)
   rushRandomWithDoorstep.push(doorstep)
-
-  const defenceFilter = CreepFilterBuilder.around(myFlag as Position)
-    .setOffsetXY(-3, -3)
-    .withBodyTypeAtXY(ATTACK, 8, 7) // 0
-    .withBodyTypeAtXY(ATTACK, 7, 8) // 1
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 6) // 2
-    .withBodyTypeAtXY(RANGED_ATTACK, 6, 8) // 3
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 5) // 4
-    .withBodyTypeAtXY(RANGED_ATTACK, 5, 8) // 5
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 4) // 6
-    .withBodyTypeAtXY(RANGED_ATTACK, 4, 8) // 7
-    .withBodyTypeAtXY(HEAL, 8, 3) // 8
-    .withBodyTypeAtXY(HEAL, 3, 8) // 9
-    .withBodyTypeAtXY(HEAL, 8, 2) // 10
-    .withBodyTypeAtXY(HEAL, 2, 8) // 11
-    // doorstep
-    .withBodyTypeAtXY(HEAL, 1, 8) // 12
-    .autoRotate()
-    .build()
-  const [defenceCreeps] = defenceFilter.filter(myPlayerInfo.creeps)
-  defenceGoals.push(
-    GridPositionGoalBuilder.around(myFlag as Position)
-    .setOffsetXY(-3, -3)
-    .withCreepToXY(defenceCreeps[0], 3, 3)
-    .withCreepToXY(defenceCreeps[1], 3, 3)
-    .withCreepToXY(defenceCreeps[2], 3, 3)
-    .withCreepToXY(defenceCreeps[3], 3, 3)
-    .withCreepToXY(defenceCreeps[4], 3, 3)
-    .withCreepToXY(defenceCreeps[5], 3, 3)
-    .withCreepToXY(defenceCreeps[6], 3, 3)
-    .withCreepToXY(defenceCreeps[7], 3, 3)
-    .withCreepToXY(defenceCreeps[8], 3, 3)
-    .withCreepToXY(defenceCreeps[9], 3, 3)
-    .withCreepToXY(defenceCreeps[10], 3, 3)
-    .withCreepToXY(defenceCreeps[11], 3, 3)
-    .withCreepToXY(defenceCreeps[12], 3, 3)
-    .autoRotate()
-    .build()
-  )
+  defenceGoals.push(doorstep)
 
   const line1Filter = CreepFilterBuilder.around(myFlag as Position)
     .setOffsetXY(-3, -3)
@@ -953,6 +914,26 @@ function plan () : void {
     function (creep: Creep) : void {
       rushRandomWithDoorstep.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
     }
+  )
+
+  defenceGoals.push(
+    GridPositionGoalBuilder.around(myFlag as Position)
+    .setOffsetXY(-3, -3)
+    .withCreepToXY(line1Creeps[0], 3, 3)
+    .withCreepToXY(line1Creeps[1], 3, 3)
+    .withCreepToXY(line1Creeps[2], 3, 3)
+    .withCreepToXY(line1Creeps[3], 3, 3)
+    .withCreepToXY(line1Creeps[4], 3, 3)
+    .withCreepToXY(line1Creeps[5], 3, 3)
+    .withCreepToXY(line2Creeps[0], 3, 3)
+    .withCreepToXY(line2Creeps[1], 3, 3)
+    .withCreepToXY(line2Creeps[2], 3, 3)
+    .withCreepToXY(line2Creeps[3], 3, 3)
+    .withCreepToXY(line2Creeps[4], 3, 3)
+    .withCreepToXY(line2Creeps[5], 3, 3)
+    .withCreepToXY(line2Creeps[6], 3, 3)
+    .autoRotate()
+    .build()
   )
 
   console.log('Planning complete at ' + getCpuTime())
