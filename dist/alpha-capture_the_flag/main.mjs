@@ -193,7 +193,7 @@ function autoMelee(creep, attackables) {
         return;
     const target = inRange[0].attackable;
     creep.attack(target);
-    new Visual().line(creep, target, { color: "#f93842" });
+    new Visual().line(creep, target, { color: '#f93842' });
 }
 function rangedMassAttackPower(target) {
     return RANGED_ATTACK_POWER * (RANGED_ATTACK_DISTANCE_RATE[target.range] || 0);
@@ -237,7 +237,7 @@ function autoHeal(creep, healables) {
     if (inTouch !== undefined) {
         const target = inTouch.attackable;
         creep.heal(target);
-        new Visual().line(creep, target, { color: "#65fd62" });
+        new Visual().line(creep, target, { color: '#65fd62' });
     }
     else {
         const target = inRange[0].attackable;
