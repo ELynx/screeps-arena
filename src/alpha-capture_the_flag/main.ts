@@ -1,7 +1,7 @@
 import { Creep, CreepMoveResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
 import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
-import { Visual } from 'game/visual'
+import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
 // assumption, no constant given
@@ -241,7 +241,7 @@ function autoMelee (creep: Creep, attackables: Attackable[]) {
 
   const target = inRange[0].attackable
   creep.attack(target)
-  new Visual().line(creep as Position, target as Position)
+  new Visual().line(creep as Position, target as Position, { color: "#f93842" as Color } as LineVisualStyle)
 }
 
 function rangedMassAttackPower (target: AttackableAndRange) : number {
@@ -270,7 +270,6 @@ function autoRanged (creep: Creep, attackables: Attackable[]) {
   } else {
     const target = inRange[0].attackable
     creep.rangedAttack(target)
-    new Visual().line(creep as Position, target as Position)
   }
 }
 
@@ -301,11 +300,12 @@ function autoHeal (creep: Creep, healables: Creep[]) {
   )
 
   if (inTouch !== undefined) {
-    creep.heal(inTouch.attackable as Creep)
+    const target = inTouch.attackable as Creep
+    creep.heal(target)
+    new Visual().line(creep as Position, target as Position, { color: "#65fd62" as Color } as LineVisualStyle)
   } else {
     const target = inRange[0].attackable as Creep
     creep.rangedHeal(target)
-    new Visual().line(creep as Position, target as Position)
   }
 }
 
