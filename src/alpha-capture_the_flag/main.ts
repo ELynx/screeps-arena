@@ -627,67 +627,6 @@ class LinePositionGoal implements PositionGoal {
   }
 }
 
-class PositionStatistics {
-  numberOfCreeps: number
-
-  min: number
-  max: number
-  average: number
-  median: number
-
-  canReach: number
-
-  private constructor (ranges: number[]) {
-    this.numberOfCreeps = ranges.length
-    this.min = Number.MAX_SAFE_INTEGER
-    this.max = Number.MIN_SAFE_INTEGER
-    this.average = NaN
-    this.median = NaN
-    this.canReach = 0
-
-    if (this.numberOfCreeps === 0) return
-
-    const ticksNow = getTicks()
-    const ticksRemaining = TICK_LIMIT - ticksNow
-
-    // for median
-    const sorted = ranges.sort()
-
-    let total = 0
-    for (const x of sorted) {
-      if (x < this.min) this.min = x
-      if (x > this.max) this.max = x
-
-      this.canReach += x <= ticksRemaining ? 1 : 0
-
-      total += x
-    }
-
-    this.average = total / this.numberOfCreeps
-    this.median = sorted[Math.floor(this.numberOfCreeps) / 2]
-  }
-
-  static forCreepsAndPosition (creeps: Creep[], position: Position) : PositionStatistics {
-    const ranges = creeps.filter(operational).map(
-      function (creep: Creep) : number {
-        return getRange(position, creep as Position)
-      }
-    )
-
-    return new PositionStatistics(ranges)
-  }
-
-  static forCreepsAndFlag (creeps: Creep[], flag?: Flag) : PositionStatistics {
-    if (!exists(flag)) return new PositionStatistics([])
-
-    return PositionStatistics.forCreepsAndPosition(creeps, flag! as Position)
-  }
-
-  toString () : string {
-    return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] average [${this.average}] median [${this.median}] reach [${this.canReach}] `
-  }
-}
-
 class CreepFilter {
   bodyTypes: string[]
   positions: Position[]
@@ -792,6 +731,64 @@ class CreepFilterBuilder extends Rotator {
   public build (): CreepFilter {
     super.build()
     return new CreepFilter(this.bodyTypes, this.positions)
+  }
+}
+
+class PositionStatistics {
+  numberOfCreeps: number
+
+  min: number
+  min2nd: number
+  max: number
+  median: number
+
+  canReach: number
+
+  private constructor (ranges: number[]) {
+    this.numberOfCreeps = ranges.length
+    this.min = Number.MAX_SAFE_INTEGER
+    this.min2nd = Number.MAX_SAFE_INTEGER
+    this.max = Number.MIN_SAFE_INTEGER
+    this.median = NaN
+    this.canReach = 0
+
+    if (this.numberOfCreeps === 0) return
+
+    const sorted = ranges.sort()
+
+    this.min = sorted[0]
+    this.min2nd = sorted.length > 1 ? sorted[1] : sorted[0]
+    this.max = sorted[sorted.length - 1]
+    this.median = sorted[Math.floor(this.numberOfCreeps) / 2]
+
+    const ticksNow = getTicks()
+    const ticksRemaining = TICK_LIMIT - ticksNow
+
+    this.canReach = Math.max(0, sorted.findIndex(
+      function (range: number) : boolean {
+        return range > ticksRemaining
+      }
+    ))
+  }
+
+  static forCreepsAndPosition (creeps: Creep[], position: Position) : PositionStatistics {
+    const ranges = creeps.filter(operational).map(
+      function (creep: Creep) : number {
+        return getRange(position, creep as Position)
+      }
+    )
+
+    return new PositionStatistics(ranges)
+  }
+
+  static forCreepsAndFlag (creeps: Creep[], flag?: Flag) : PositionStatistics {
+    if (!exists(flag)) return new PositionStatistics([])
+
+    return PositionStatistics.forCreepsAndPosition(creeps, flag! as Position)
+  }
+
+  toString () : string {
+    return `No [${this.numberOfCreeps}] min/2nd [${this.min}/${this.min2nd}] max [${this.max}] median [${this.median}] canReach [${this.canReach}]`
   }
 }
 
@@ -911,10 +908,9 @@ function advanceGoals () : void {
   // enemy is not hugging corner
 
   const myOffence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, enemyFlag)
+  const myDefence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, myFlag)
 
-  if (enemyOffence.median < MAP_SIDE_SIZE / 2 && enemyOffence.min < ) {
-
-  }
+  if ()
 }
 
 function play () : void {
