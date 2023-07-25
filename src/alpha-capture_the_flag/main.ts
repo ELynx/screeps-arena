@@ -661,6 +661,41 @@ class CreepFilter {
   }
 }
 
+class MultiGoal implements Goal {
+  goals: Goal[]
+
+  constructor (goals: Goal[]) {
+    this.goals = goals
+  }
+
+  advance(options?: FindPathOptions): CreepMoveResult {
+    if (this.goals.length === 0) return ERR_INVALID_ARGS
+
+    let minCost = Number.MAX_SAFE_INTEGER // also filter out other MAX_...
+    let minIndex = -1
+
+    for (let i = 0; i < this.goals.length; ++i) {
+      const goalCost = this.goals[i].cost(options)
+      if (goalCost < minCost) {
+        minIndex = i
+      }
+    }
+
+    if (minIndex < 0) return ERR_NO_BODYPART
+    return this.goals[minIndex].advance(options)
+  }
+
+  cost(options?: FindPathOptions): number {
+    if (this.goals.length === 0) return Number.MAX_SAFE_INTEGER
+
+    return this.goals.map(
+      function (goal: Goal) : number {
+        return goal.cost(options)
+      }
+    ).sort()[0]
+  }
+}
+
 class CreepFilterBuilder extends Rotator {
   bodyTypes: string[]
 
