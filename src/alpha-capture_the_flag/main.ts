@@ -800,6 +800,9 @@ const rushRandom : PositionGoal[] = []
 const rushOrganised : PositionGoal[] = []
 const powerUp : PositionGoal[] = []
 const defence : PositionGoal[] = []
+const rushRandomOrDefence : PositionGoal[] = []
+const rushOrganisedOrDefence : PositionGoal [] = []
+const prepare : PositionGoal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
@@ -907,10 +910,23 @@ function advanceGoals () : void {
   // enemy is not wiped
   // enemy is not hugging corner
 
-  const myOffence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, enemyFlag)
-  const myDefence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, myFlag)
+  // more than half enemy creeps are committed to offence
+  if (enemyOffence.median < MAP_SIDE_SIZE / 2) {
+    // continue if deep in, otherwise return and help
+    if (hot) {
+      console.log('E. rushRandomOrDefence')
+      rushRandomOrDefence.forEach(advance)
+    } else {
+      console.log('F. rushOrganisedOrDefence')
+      rushOrganisedOrDefence.forEach(advance)
+    }
 
-  if ()
+    return
+  }
+
+  // enemy is not committed to attack yet
+  console.log('G. prepare')
+  prepare.forEach(advance)
 }
 
 function play () : void {
