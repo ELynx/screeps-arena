@@ -798,16 +798,17 @@ class CreepFilterBuilder extends Rotator {
 let myFlag : Flag | undefined
 let enemyFlag : Flag | undefined
 
-const unexpectedCreepsGoals : PositionGoal[] = []
+const unexpecteds : PositionGoal[] = []
 const rushRandom : PositionGoal[] = []
 const rushOrganised : PositionGoal[] = []
 const powerUp : PositionGoal[] = []
+const defence : PositionGoal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
     console.log('Unexpected creep ', creep)
     if (enemyFlag) {
-      unexpectedCreepsGoals.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
+      unexpecteds.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
     }
   }
 }
@@ -869,19 +870,22 @@ function plan () : void {
 }
 
 function advanceGoals () : void {
-  unexpectedCreepsGoals.forEach(advance)
+  unexpecteds.forEach(advance)
 
   if (myFlag === undefined || enemyFlag === undefined) return
 
-  const hot = getTicks() > TICK_LIMIT - MAP_SIDE_SIZE
-  const endspiel = getTicks() > TICK_LIMIT - MAP_SIDE_SIZE * 2
+  const ticks = getTicks()
+
+  const early = ticks < MAP_SIDE_SIZE
+  const hot = ticks > TICK_LIMIT - MAP_SIDE_SIZE
+  const endspiel =ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2
   
   const enemyOffence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag)
   const enemyDefence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, enemyFlag)
 
   // wiped / too far away
   // idle / castled
-  if (enemyOffence.canReach === 0 || enemyDefence.max < MAP_SIDE_SIZE_SQRT) {
+  if (enemyOffence.canReach === 0 || (enemyDefence.max < MAP_SIDE_SIZE_SQRT && !early)) {
     if (hot) {
       console.log('A. rushRandom')
       rushRandom.forEach(advance)
@@ -893,6 +897,13 @@ function advanceGoals () : void {
       powerUp.forEach(advance)
     }
 
+    return
+  }
+
+  // brace for early impact
+  if (early) {
+    console.log('D. defence')
+    defence.forEach(advance)
     return
   }
 }
