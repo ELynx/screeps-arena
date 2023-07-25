@@ -364,6 +364,15 @@ class CreepLine {
     return head!.moveTo(target, options)
   }
 
+  cost (target: Position, options?: FindPathOptions) {
+    for (let i = this.creeps.length - 1; i >= 0; --i) {
+      const head = this.creeps[i]
+      if (operational(head)) return getRange(head as Position, target)
+    }
+
+    return Number.MAX_SAFE_INTEGER
+  }
+
   private chaseHead (options?: FindPathOptions) : [CreepMoveResult, Creep?] {
     const state = this.refreshState()
     if (state !== OK) return [state, undefined]
@@ -491,13 +500,14 @@ class Rotator {
 
 interface Goal {
   advance (options?: FindPathOptions) : CreepMoveResult
+  cost (options?: FindPathOptions) : number
 }
 
 function advance (positionGoal: Goal) : void {
   positionGoal.advance()
 }
 
-class SingleCreepPositionGoal implements Goal {
+class CreepPositionGoal implements Goal {
   creep: Creep
   position: Position
 
@@ -511,44 +521,14 @@ class SingleCreepPositionGoal implements Goal {
     if (atSamePosition(this.creep as Position, this.position)) return OK
     return this.creep.moveTo(this.position, options)
   }
-}
 
-class GridPositionGoal implements Goal {
-  creeps: Creep[]
-  positions: Position[]
-
-  constructor (creeps: Creep[], positions: Position[]) {
-    this.creeps = creeps
-    this.positions = positions
-  }
-
-  advance (options?: FindPathOptions): CreepMoveResult {
-    // error case
-    if (this.creeps.length !== this.positions.length) return ERR_INVALID_ARGS
-
-    // elimination case
-    if (!this.creeps.some(operational)) return ERR_NO_BODYPART
-
-    let totalRc : CreepMoveResult = OK
-
-    for (let i = 0; i < this.creeps.length; ++i) {
-      const creep = this.creeps[i]
-      const position = this.positions[i]
-      const oneRc = this.advanceOne(creep, position, options)
-      if (oneRc < totalRc) totalRc = oneRc // less than because error codes are negatives
-    }
-
-    return totalRc
-  }
-
-  private advanceOne (creep: Creep, position: Position, options?: FindPathOptions) : CreepMoveResult {
-    if (!operational(creep)) return OK // fallback for the fallen, overall group is OK
-    if (atSamePosition(creep as Position, position)) return OK
-    return creep.moveTo(position, options)
+  cost(options?: FindPathOptions): number {
+    if (!operational(this.creep)) return Number.MAX_SAFE_INTEGER
+    return getRange(this.creep as Position, this.position)
   }
 }
 
-class GridPositionGoalBuilder extends Rotator {
+class GridCreepPositionGoalBuilder extends Rotator {
   creeps: Creep[]
 
   private constructor (anchor: Position) {
@@ -556,60 +536,67 @@ class GridPositionGoalBuilder extends Rotator {
     this.creeps = []
   }
 
-  static around (position: Position) : GridPositionGoalBuilder {
-    return new GridPositionGoalBuilder(position)
+  static around (position: Position) : GridCreepPositionGoalBuilder {
+    return new GridCreepPositionGoalBuilder(position)
   }
 
-  public setOffset (offset: Position): GridPositionGoalBuilder {
+  public setOffset (offset: Position): GridCreepPositionGoalBuilder {
     super.setOffset(offset)
     return this
   }
 
-  public setOffsetXY (x: number, y: number) : GridPositionGoalBuilder {
+  public setOffsetXY (x: number, y: number) : GridCreepPositionGoalBuilder {
     const position = { x, y } as Position
     super.setOffset(position)
     return this
   }
 
-  public withCreepToPosition (creep: Creep, position: Position) : GridPositionGoalBuilder {
+  public withCreepToPosition (creep: Creep, position: Position) : GridCreepPositionGoalBuilder {
     this.creeps.push(creep)
     super.with(position)
     return this
   }
 
-  public withCreepToXY (creep: Creep, x: number, y: number) : GridPositionGoalBuilder {
+  public withCreepToXY (creep: Creep, x: number, y: number) : GridCreepPositionGoalBuilder {
     const position = { x, y } as Position
     return this.withCreepToPosition(creep, position)
   }
 
-  public rotate0 (): GridPositionGoalBuilder {
+  public rotate0 (): GridCreepPositionGoalBuilder {
     super.rotate0()
     return this
   }
 
-  public rotate90 (): GridPositionGoalBuilder {
+  public rotate90 (): GridCreepPositionGoalBuilder {
     super.rotate90()
     return this
   }
 
-  public rotate180 (): GridPositionGoalBuilder {
+  public rotate180 (): GridCreepPositionGoalBuilder {
     super.rotate180()
     return this
   }
 
-  public rotate270 (): GridPositionGoalBuilder {
+  public rotate270 (): GridCreepPositionGoalBuilder {
     super.rotate270()
     return this
   }
 
-  public autoRotate (): GridPositionGoalBuilder {
+  public autoRotate (): GridCreepPositionGoalBuilder {
     super.autoRotate()
     return this
   }
 
-  public build () : GridPositionGoal {
+  public build () : CreepPositionGoal[] {
     super.build()
-    return new GridPositionGoal(this.creeps, this.positions)
+    if (this.creeps.length !== this.positions.length) return []
+
+    const result : CreepPositionGoal[] = new Array(this.creeps.length)
+    for (let i = 0; i < this.creeps.length; ++i) {
+      result[i] = new CreepPositionGoal(this.creeps[i], this.positions[i])
+    }
+
+    return result
   }
 }
 
@@ -624,6 +611,10 @@ class LinePositionGoal implements Goal {
 
   advance (options?: FindPathOptions): CreepMoveResult {
     return this.creepLine.moveTo(this.position, options)
+  }
+
+  cost(options?: FindPathOptions): number {
+    return this.creepLine.cost(this.position, options)
   }
 }
 
@@ -808,7 +799,7 @@ function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
     console.log('Unexpected creep ', creep)
     if (enemyFlag) {
-      unexpecteds.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
+      unexpecteds.push(new CreepPositionGoal(creep, enemyFlag as Position))
     }
   }
 }
@@ -862,7 +853,7 @@ function plan () : void {
 
   expected.forEach(
     function (creep: Creep) : void {
-      rushRandom.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
+      rushRandom.push(new CreepPositionGoal(creep, enemyFlag as Position))
     }
   )
 
