@@ -489,15 +489,15 @@ class Rotator {
   }
 }
 
-interface PositionGoal {
+interface Goal {
   advance (options?: FindPathOptions) : CreepMoveResult
 }
 
-function advance (positionGoal: PositionGoal) : void {
+function advance (positionGoal: Goal) : void {
   positionGoal.advance()
 }
 
-class SingleCreepPositionGoal implements PositionGoal {
+class SingleCreepPositionGoal implements Goal {
   creep: Creep
   position: Position
 
@@ -513,7 +513,7 @@ class SingleCreepPositionGoal implements PositionGoal {
   }
 }
 
-class GridPositionGoal implements PositionGoal {
+class GridPositionGoal implements Goal {
   creeps: Creep[]
   positions: Position[]
 
@@ -613,7 +613,7 @@ class GridPositionGoalBuilder extends Rotator {
   }
 }
 
-class LinePositionGoal implements PositionGoal {
+class LinePositionGoal implements Goal {
   creepLine: CreepLine
   position: Position
 
@@ -795,14 +795,14 @@ class PositionStatistics {
 let myFlag : Flag | undefined
 let enemyFlag : Flag | undefined
 
-const unexpecteds : PositionGoal[] = []
-const rushRandom : PositionGoal[] = []
-const rushOrganised : PositionGoal[] = []
-const powerUp : PositionGoal[] = []
-const defence : PositionGoal[] = []
-const rushRandomOrDefence : PositionGoal[] = []
-const rushOrganisedOrDefence : PositionGoal [] = []
-const prepare : PositionGoal[] = []
+const unexpecteds : Goal[] = []
+const rushRandom : Goal[] = []
+const rushOrganised : Goal[] = []
+const powerUp : Goal[] = []
+const defence : Goal[] = []
+const rushRandomOrDefence : Goal[] = []
+const rushOrganisedOrDefence : Goal [] = []
+const prepare : Goal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
