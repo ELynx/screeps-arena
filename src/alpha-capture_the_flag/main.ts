@@ -6,6 +6,7 @@ import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
 // assumption, no constant given
 const MAP_SIDE_SIZE : number = 100
+const MAP_SIDE_SIZE_SQRT : number = Math.round(Math.sqrt(MAP_SIDE_SIZE))
 const TICK_LIMIT : number = 2000
 
 function sortById (a: GameObject, b: GameObject) : number {
@@ -798,7 +799,9 @@ let myFlag : Flag | undefined
 let enemyFlag : Flag | undefined
 
 const unexpectedCreepsGoals : PositionGoal[] = []
-const rushRandomAll : PositionGoal[] = []
+const rushRandom : PositionGoal[] = []
+const rushOrganised : PositionGoal[] = []
+const powerUp : PositionGoal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
@@ -858,7 +861,7 @@ function plan () : void {
 
   expected.forEach(
     function (creep: Creep) : void {
-      rushRandomAll.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
+      rushRandom.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
     }
   )
 
@@ -870,7 +873,28 @@ function advanceGoals () : void {
 
   if (myFlag === undefined || enemyFlag === undefined) return
 
-  rushRandomAll.forEach(advance)
+  const hot = getTicks() > TICK_LIMIT - MAP_SIDE_SIZE
+  const endspiel = getTicks() > TICK_LIMIT - MAP_SIDE_SIZE * 2
+  
+  const enemyOffence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag)
+  const enemyDefence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, enemyFlag)
+
+  // wiped / too far away
+  // idle / castled
+  if (enemyOffence.canReach === 0 || enemyDefence.max < MAP_SIDE_SIZE_SQRT) {
+    if (hot) {
+      console.log('A. rushRandom')
+      rushRandom.forEach(advance)
+    } else if (endspiel) {
+      console.log('B. rushOrganised')
+      rushOrganised.forEach(advance)
+    } else {
+      console.log('C. powerUp')
+      powerUp.forEach(advance)
+    }
+
+    return
+  }
 }
 
 function play () : void {
