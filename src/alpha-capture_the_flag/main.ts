@@ -797,13 +797,8 @@ class CreepFilterBuilder extends Rotator {
 let myFlag : Flag | undefined
 let enemyFlag : Flag | undefined
 
-let enemyStartDistance : number
-
 const unexpectedCreepsGoals : PositionGoal[] = []
 const rushRandomAll : PositionGoal[] = []
-const rushWithTwoLines : PositionGoal[] = []
-const rushRandomWithDoorstep : PositionGoal[] = []
-const defenceGoals : PositionGoal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
@@ -867,75 +862,6 @@ function plan () : void {
     }
   )
 
-  const doorstopFilter = CreepFilterBuilder.around(myFlag as Position)
-    .setOffsetXY(-3, -3)
-    .withBodyTypeAtXY(HEAL, 8, 1)
-    .autoRotate()
-    .build()
-  const [doorstopCreeps] = doorstopFilter.filter(myPlayerInfo.creeps)
-  const doorstep = new SingleCreepPositionGoal(doorstopCreeps[0], myFlag as Position)
-  rushWithTwoLines.push(doorstep)
-  rushRandomWithDoorstep.push(doorstep)
-  defenceGoals.push(doorstep)
-
-  const line1Filter = CreepFilterBuilder.around(myFlag as Position)
-    .setOffsetXY(-3, -3)
-    .withBodyTypeAtXY(ATTACK, 8, 7)
-    .withBodyTypeAtXY(HEAL, 8, 3)
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 6)
-    .withBodyTypeAtXY(HEAL, 8, 2)
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 5)
-    // doorstep
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 4)
-    .autoRotate()
-    .build()
-  const [line1Creeps] = line1Filter.filter(myPlayerInfo.creeps)
-  rushWithTwoLines.push(new LinePositionGoal(line1Creeps, enemyFlag as Position))
-  line1Creeps.forEach(
-    function (creep: Creep) : void {
-      rushRandomWithDoorstep.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
-    }
-  )
-
-  const line2Filter = CreepFilterBuilder.around(myFlag as Position)
-    .setOffsetXY(-3, -3)
-    .withBodyTypeAtXY(ATTACK, 7, 8)
-    .withBodyTypeAtXY(HEAL, 3, 8)
-    .withBodyTypeAtXY(RANGED_ATTACK, 6, 8)
-    .withBodyTypeAtXY(HEAL, 2, 8)
-    .withBodyTypeAtXY(RANGED_ATTACK, 5, 8)
-    .withBodyTypeAtXY(HEAL, 1, 8)
-    .withBodyTypeAtXY(RANGED_ATTACK, 4, 8)
-    .autoRotate()
-    .build()
-  const [line2Creeps] = line2Filter.filter(myPlayerInfo.creeps)
-  rushWithTwoLines.push(new LinePositionGoal(line2Creeps, enemyFlag as Position))
-  line2Creeps.forEach(
-    function (creep: Creep) : void {
-      rushRandomWithDoorstep.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
-    }
-  )
-
-  defenceGoals.push(
-    GridPositionGoalBuilder.around(myFlag as Position)
-      .setOffsetXY(-3, -3)
-      .withCreepToXY(line1Creeps[0], 4, 3)
-      .withCreepToXY(line1Creeps[1], 3, 2)
-      .withCreepToXY(line1Creeps[2], 4, 1)
-      .withCreepToXY(line1Creeps[3], 5, 2)
-      .withCreepToXY(line1Creeps[4], 6, 2)
-      .withCreepToXY(line1Creeps[5], 7, 2)
-      .withCreepToXY(line2Creeps[0], 3, 4)
-      .withCreepToXY(line2Creeps[1], 2, 3)
-      .withCreepToXY(line2Creeps[2], 1, 4)
-      .withCreepToXY(line2Creeps[3], 2, 5)
-      .withCreepToXY(line2Creeps[4], 2, 6)
-      .withCreepToXY(line2Creeps[5], 1, 6)
-      .withCreepToXY(line2Creeps[6], 2, 7)
-      .autoRotate()
-      .build()
-  )
-
   console.log('Planning complete at ' + getCpuTime())
 }
 
@@ -944,38 +870,7 @@ function advanceGoals () : void {
 
   if (myFlag === undefined || enemyFlag === undefined) return
 
-  const enemyAdvance = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag)
-  if (enemyStartDistance === undefined) {
-    enemyStartDistance = enemyAdvance.min
-  }
-
-  const endspiel : boolean = getTicks() >= TICK_LIMIT - (MAP_SIDE_SIZE * 2)
-
-  if (enemyAdvance.canReach === 0) {
-    if (endspiel) {
-      console.log('A. rushRandomAll')
-      rushRandomAll.forEach(advance)
-    } else {
-      console.log('B. rushWithTwoLines')
-      rushWithTwoLines.forEach(advance)
-    }
-    return
-  }
-
-  const myDefence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, myFlag)
-  if (enemyAdvance.min < enemyStartDistance && enemyAdvance.median <= myDefence.median) {
-    console.log('C. defenceGoals')
-    defenceGoals.forEach(advance)
-    return
-  }
-
-  if (endspiel) {
-    console.log('D. rushRandomWithDoorstep')
-    rushRandomWithDoorstep.forEach(advance)
-  } else {
-    console.log('E. rushWithTwoLines')
-    rushWithTwoLines.forEach(advance)
-  }
+  rushRandomAll.forEach(advance)
 }
 
 function play () : void {
