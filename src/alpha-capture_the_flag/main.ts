@@ -906,6 +906,15 @@ function advanceGoals () : void {
     defence.forEach(advance)
     return
   }
+
+  // enemy is not wiped
+  // enemy is not hugging corner
+
+  const myOffence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, enemyFlag)
+
+  if (enemyOffence.median < MAP_SIDE_SIZE / 2 && enemyOffence.min < ) {
+
+  }
 }
 
 function play () : void {
