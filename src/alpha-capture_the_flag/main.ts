@@ -4,6 +4,8 @@ import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByProto
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
+type MoreFindPathOptions = FindPathOptions & { extend?: boolean }
+
 // assumption, no constant given
 const MAP_SIDE_SIZE : number = 100
 const MAP_SIDE_SIZE_SQRT : number = Math.round(Math.sqrt(MAP_SIDE_SIZE))
@@ -355,7 +357,7 @@ class CreepLine {
     return head!.move(direction)
   }
 
-  moveTo (target: Position, options?: FindPathOptions) {
+  moveTo (target: Position, options?: MoreFindPathOptions) {
     const [rc, head] = this.chaseHead(options)
     if (rc !== OK) return rc
 
@@ -364,7 +366,7 @@ class CreepLine {
     return head!.moveTo(target, options)
   }
 
-  cost (target: Position, options?: FindPathOptions) {
+  cost (target: Position, options?: MoreFindPathOptions) {
     for (let i = this.creeps.length - 1; i >= 0; --i) {
       const head = this.creeps[i]
       if (operational(head)) return getRange(head as Position, target)
@@ -373,7 +375,7 @@ class CreepLine {
     return Number.MAX_SAFE_INTEGER
   }
 
-  private chaseHead (options?: FindPathOptions) : [CreepMoveResult, Creep?] {
+  private chaseHead (options?: MoreFindPathOptions) : [CreepMoveResult, Creep?] {
     const state = this.refreshState()
     if (state !== OK) return [state, undefined]
 
@@ -499,8 +501,8 @@ class Rotator {
 }
 
 interface Goal {
-  advance (options?: FindPathOptions) : CreepMoveResult
-  cost (options?: FindPathOptions) : number
+  advance (options?: MoreFindPathOptions) : CreepMoveResult
+  cost (options?: MoreFindPathOptions) : number
 }
 
 function advance (positionGoal: Goal) : void {
@@ -516,13 +518,13 @@ class CreepPositionGoal implements Goal {
     this.position = position
   }
 
-  advance (options?: FindPathOptions): CreepMoveResult {
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
     if (!operational(this.creep)) return ERR_NO_BODYPART
     if (atSamePosition(this.creep as Position, this.position)) return OK
     return this.creep.moveTo(this.position, options)
   }
 
-  cost (options?: FindPathOptions): number {
+  cost (options?: MoreFindPathOptions): number {
     if (!operational(this.creep)) return Number.MAX_SAFE_INTEGER
     return getRange(this.creep as Position, this.position)
   }
@@ -609,11 +611,11 @@ class LinePositionGoal implements Goal {
     this.position = position
   }
 
-  advance (options?: FindPathOptions): CreepMoveResult {
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
     return this.creepLine.moveTo(this.position, options)
   }
 
-  cost (options?: FindPathOptions): number {
+  cost (options?: MoreFindPathOptions): number {
     return this.creepLine.cost(this.position, options)
   }
 }
@@ -668,7 +670,7 @@ class AndGoal implements Goal {
     this.goals = goals
   }
 
-  advance (options?: FindPathOptions): CreepMoveResult {
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
     if (this.goals.length === 0) return ERR_INVALID_ARGS
 
     let resultRc : CreepMoveResult = OK
@@ -681,7 +683,7 @@ class AndGoal implements Goal {
     return resultRc
   }
 
-  cost (options?: FindPathOptions): number {
+  cost (options?: MoreFindPathOptions): number {
     if (this.goals.length === 0) return Number.MAX_SAFE_INTEGER
 
     let maxCost = Number.MIN_SAFE_INTEGER
@@ -702,7 +704,7 @@ class OrGoal implements Goal {
     this.goals = goals
   }
 
-  advance (options?: FindPathOptions): CreepMoveResult {
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
     if (this.goals.length === 0) return ERR_INVALID_ARGS
 
     let minCost = Number.MAX_SAFE_INTEGER // also filter out other MAX_...
@@ -720,7 +722,7 @@ class OrGoal implements Goal {
     return this.goals[minIndex].advance(options)
   }
 
-  cost (options?: FindPathOptions): number {
+  cost (options?: MoreFindPathOptions): number {
     if (this.goals.length === 0) return Number.MAX_SAFE_INTEGER
 
     let minCost = Number.MAX_SAFE_INTEGER
