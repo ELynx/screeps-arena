@@ -633,6 +633,67 @@ class LinePositionGoal implements Goal {
   }
 }
 
+class LinePositionGoalWithAutoReverse extends LinePositionGoal {
+  canReverseTick: number // tick in future
+  backwards: boolean
+
+  constructor (creeps: Creep[], position: Position) {
+    super(creeps, position)
+    this.canReverseTick = Number.MIN_SAFE_INTEGER
+    this.backwards = false
+  }
+
+  advance(options?: MoreFindPathOptions): CreepMoveResult {
+    const ticks = getTicks()
+
+    if (ticks >= this.canReverseTick) {
+      const fff = this.costForwards(options)
+      const bbb = this.costBackwards(options)
+      const delta = fff - bbb
+
+      let newBackwards = this.backwards
+
+      if (delta > 0) {
+        // forward is more expensive than backward
+        newBackwards = true
+      } else if (delta < 0) {
+        // backward is more expensive than forwards
+        newBackwards = false
+      }
+
+      if (newBackwards !== this.backwards) {
+        this.canReverseTick = ticks + 2 * this.creepLine.creeps.length
+        this.backwards = newBackwards
+      }
+    }
+
+    const copyOptions = Object.assign(options || {}, { backwards: this.backwards })
+    return super.advance(copyOptions)
+  }
+
+  cost(options?: MoreFindPathOptions): number {
+    if (getTicks() >= this.canReverseTick) {
+      return Math.min(this.costForwards(options), this.costBackwards(options))
+    }
+
+    if (this.backwards) {
+      return this.costBackwards(options)
+    } else {
+      return this.costForwards(options)
+    }
+  }
+
+  private costForwards (options?: MoreFindPathOptions): number {
+    const copyOptions = Object.assign(options || {}, { backwards: false });
+    return super.cost(copyOptions)
+  }
+
+  private costBackwards (options?: MoreFindPathOptions): number {
+    const copyOptions = Object.assign(options || {}, { backwards: true });
+    return super.cost(copyOptions)
+  }
+}
+
 class AndGoal implements Goal {
   goals: Goal[]
 
