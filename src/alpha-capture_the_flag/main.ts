@@ -668,7 +668,7 @@ class AndGoal implements Goal {
     this.goals = goals
   }
 
-  advance(options?: FindPathOptions): CreepMoveResult {
+  advance (options?: FindPathOptions): CreepMoveResult {
     if (this.goals.length === 0) return ERR_INVALID_ARGS
 
     let resultRc : CreepMoveResult = OK
@@ -681,7 +681,7 @@ class AndGoal implements Goal {
     return resultRc
   }
 
-  cost(options?: FindPathOptions): number {
+  cost (options?: FindPathOptions): number {
     if (this.goals.length === 0) return Number.MAX_SAFE_INTEGER
 
     let maxCost = Number.MIN_SAFE_INTEGER
