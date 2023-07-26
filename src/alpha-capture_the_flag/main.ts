@@ -5,7 +5,7 @@ import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { searchPath } from 'game/path-finder'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
-type MoreFindPathOptions = FindPathOptions & { backwards?: boolean }
+type MoreFindPathOptions = FindPathOptions & { backwards?: boolean, costByPath?: boolean }
 
 // assumption, no constant given
 const MAP_SIDE_SIZE : number = 100
@@ -380,9 +380,13 @@ class CreepLine {
       const ri = this.locoToWagonIndex(i, options)
       const loco = this.creeps[ri]
       if (operational(loco)) {
-        const path = searchPath(loco as Position, target, options)
-        if (path.incomplete) return Number.MAX_SAFE_INTEGER
-        return path.cost / (options.plainCost || 2)
+        if (options && options.costByPath) {
+          const path = searchPath(loco as Position, target, options)
+          if (path.incomplete) return Number.MAX_SAFE_INTEGER
+          return path.cost / (options.plainCost || 2)
+        } else {
+          return getRange(loco as Position, target)
+        }
       }
     }
 
@@ -652,8 +656,10 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
     const ticks = getTicks()
 
     if (ticks >= this.canReverseTick) {
-      const fff = this.costForwards(options)
-      const bbb = this.costBackwards(options)
+      const costByPathOptions = Object.assign(options || {}, { costByPath: true })
+
+      const fff = this.costForwards(costByPathOptions)
+      const bbb = this.costBackwards(costByPathOptions)
       const delta = fff - bbb
 
       let newBackwards = this.backwards
