@@ -955,11 +955,11 @@ function plan () : void {
     prepare.push(defenceGoal)
   }
 
-  const line1 : CreepPositionGoal[] = [defenceGoals[0], defenceGoals[2], defenceGoals[8]]
-  const line2 : CreepPositionGoal[] = [defenceGoals[1], defenceGoals[3], defenceGoals[9]]
-  const line3 : CreepPositionGoal[] = [defenceGoals[4], defenceGoals[10]]
-  const line4 : CreepPositionGoal[] = [defenceGoals[5], defenceGoals[11]]
-  const line5 : CreepPositionGoal[] = [defenceGoals[6], defenceGoals[12], defenceGoals[7]]
+  const line1 : CreepPositionGoal[] = [defenceGoals[0], defenceGoals[10], defenceGoals[2]]
+  const line2 : CreepPositionGoal[] = [defenceGoals[4], defenceGoals[12]]
+  const line3 : CreepPositionGoal[] = [defenceGoals[6], defenceGoals[8]]
+  const line4 : CreepPositionGoal[] = [defenceGoals[1], defenceGoals[11], defenceGoals[3]]
+  const line5 : CreepPositionGoal[] = [defenceGoals[5], defenceGoals[9], defenceGoals[7]]
   const lines : CreepPositionGoal[][] = [line1, line2, line3, line4, line5]
 
   for (const line of lines) {
