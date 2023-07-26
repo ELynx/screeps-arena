@@ -990,7 +990,7 @@ function advanceGoals () : void {
 
   const early = ticks < MAP_SIDE_SIZE
   const hot = ticks > TICK_LIMIT - MAP_SIDE_SIZE
-  const endspiel = ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2
+  const endspiel = ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2.5
 
   const enemyOffence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag)
   const enemyDefence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, enemyFlag)
