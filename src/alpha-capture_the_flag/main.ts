@@ -864,8 +864,8 @@ const rushRandom : Goal[] = []
 const rushOrganised : Goal[] = []
 const powerUp : Goal[] = []
 const defence : Goal[] = []
-const rushRandomOrDefence : Goal[] = []
-const rushOrganisedOrDefence : Goal [] = []
+const defenceOrRushRandom : Goal[] = []
+const defenceOrRushOrganised : Goal [] = []
 const prepare : Goal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
@@ -939,7 +939,7 @@ function plan () : void {
     .withCreepToXY(expected[10], 42, 42)
     .withCreepToXY(expected[11], 42, 42)
     .withCreepToXY(expected[12], 42, 42)
-    .withCreepToXY(expected[13], 42, 42)
+    .withCreepToXY(expected[13], 3, 3) // doorstop
     .autoRotate()
     .build()
 
@@ -948,12 +948,35 @@ function plan () : void {
 
     defence.push(defenceGoal)
     rushRandom.push(rushGoal)
-    rushRandomOrDefence.push(new OrGoal([defenceGoal, rushGoal]))
+    defenceOrRushRandom.push(new OrGoal([defenceGoal, rushGoal]))
 
     // TODO actual logic, not corner hug
     powerUp.push(defenceGoal)
     prepare.push(defenceGoal)
   }
+
+  const line1 : CreepPositionGoal[] = [defenceGoals[0], defenceGoals[2], defenceGoals[8]]
+  const line2 : CreepPositionGoal[] = [defenceGoals[1], defenceGoals[3], defenceGoals[9]]
+  const line3 : CreepPositionGoal[] = [defenceGoals[4], defenceGoals[10]]
+  const line4 : CreepPositionGoal[] = [defenceGoals[5], defenceGoals[11]]
+  const line5 : CreepPositionGoal[] = [defenceGoals[6], defenceGoals[12], defenceGoals[7]]
+  const lines : CreepPositionGoal[][] = [line1, line2, line3, line4, line5]
+
+  for (const line of lines) {
+    const doDefence = new AndGoal(line)
+    const doOffence = new LinePositionGoal(line.map(
+      function (goal: CreepPositionGoal) : Creep {
+        return goal.creep
+      }
+    ), enemyFlag as Position)
+
+    rushOrganised.push(doOffence)
+    defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]))
+  }
+
+  // don't forget intentional doorstep
+  rushOrganised.push(defenceGoals[13])
+  defenceOrRushOrganised.push(defenceGoals[13])
 
   console.log('Planning complete at ' + getCpuTime())
 }
@@ -1004,10 +1027,10 @@ function advanceGoals () : void {
     // continue if deep in, otherwise return and help
     if (hot) {
       console.log('E. rushRandomOrDefence')
-      rushRandomOrDefence.forEach(advance)
+      defenceOrRushRandom.forEach(advance)
     } else {
       console.log('F. rushOrganisedOrDefence')
-      rushOrganisedOrDefence.forEach(advance)
+      defenceOrRushOrganised.forEach(advance)
     }
 
     return
