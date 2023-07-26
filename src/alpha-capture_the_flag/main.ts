@@ -4,7 +4,7 @@ import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByProto
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
-type MoreFindPathOptions = FindPathOptions & { extend?: boolean }
+type MoreFindPathOptions = FindPathOptions & { backwards?: boolean }
 
 // assumption, no constant given
 const MAP_SIDE_SIZE : number = 100
@@ -344,38 +344,47 @@ class CreepLine {
 
   // head at index 0
   constructor (creeps: Creep[]) {
+    // safeguard against array modifications
     this.creeps = creeps.concat()
-
-    // because head at index 0
-    this.creeps.reverse()
   }
 
   move (direction: Direction, options?: MoreFindPathOptions) : CreepMoveResult {
-    const [rc, head] = this.chaseHead(options)
+    const [rc, loco] = this.chaseLoco(options)
     if (rc !== OK) return rc
 
-    return head!.move(direction)
+    return loco!.move(direction)
   }
 
   moveTo (target: Position, options?: MoreFindPathOptions) {
-    const [rc, head] = this.chaseHead(options)
+    const [rc, loco] = this.chaseLoco(options)
     if (rc !== OK) return rc
 
-    if (atSamePosition(head! as Position, target)) return OK
+    if (atSamePosition(loco! as Position, target)) return OK
 
-    return head!.moveTo(target, options)
+    return loco!.moveTo(target, options)
+  }
+
+  protected locoToWagonIndex (magicNumber: number, backwards?: boolean) : number {
+    if (backwards === true) return this.wagonToLocoIndex(magicNumber, false)
+    return magicNumber
+  }
+
+  protected wagonToLocoIndex (magicNumber: number, backwards?: boolean) : number {
+    if (backwards === true) return this.locoToWagonIndex(magicNumber, false)
+    return this.creeps.length - 1 - magicNumber
   }
 
   cost (target: Position, options?: MoreFindPathOptions) {
-    for (let i = this.creeps.length - 1; i >= 0; --i) {
-      const head = this.creeps[i]
-      if (operational(head)) return getRange(head as Position, target)
+    for (let i = 0; i < this.creeps.length; ++i) {
+      const ri = this.locoToWagonIndex(i, options.backwards)
+      const loco = this.creeps[ri]
+      if (operational(loco)) return getRange(loco as Position, target)
     }
 
     return Number.MAX_SAFE_INTEGER
   }
 
-  private chaseHead (options?: MoreFindPathOptions) : [CreepMoveResult, Creep?] {
+  private chaseLoco (options?: MoreFindPathOptions) : [CreepMoveResult, Creep?] {
     const state = this.refreshState()
     if (state !== OK) return [state, undefined]
 
@@ -386,8 +395,11 @@ class CreepLine {
     if (this.creeps.length === 1) return [OK, this.creeps[0]]
 
     for (let i = 0; i < this.creeps.length - 1; ++i) {
-      const current = this.creeps[i]
-      const next = this.creeps[i + 1]
+      const ri0 = this.wagonToLocoIndex(i, options.backwards)
+      const ri1 = this.wagonToLocoIndex(i + 1, options.backwards)
+
+      const current = this.creeps[ri0]
+      const next = this.creeps[ri1]
 
       const range = getRange(current as Position, next as Position)
 
@@ -406,7 +418,8 @@ class CreepLine {
     }
 
     // return head for command
-    return [OK, this.creeps[this.creeps.length - 1]]
+    const locoIndex = this.locoToWagonIndex(0, options.backwards)
+    return [OK, this.creeps[locoIndex]]
   }
 
   private refreshState () : CreepMoveResult {
