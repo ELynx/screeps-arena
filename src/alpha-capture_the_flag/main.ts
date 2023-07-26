@@ -620,49 +620,6 @@ class LinePositionGoal implements Goal {
   }
 }
 
-class CreepFilter {
-  bodyTypes: string[]
-  positions: Position[]
-
-  constructor (bodyTypes: string[], positions: Position[]) {
-    this.bodyTypes = bodyTypes
-    this.positions = positions
-  }
-
-  // returns [found creeps in specified order, remainder]
-  // uses all or nothing approach, if one requested is not found, all are dropped
-  filter (creeps: Creep[]) : [Creep[], Creep[]] {
-    if (this.positions.length !== this.bodyTypes.length) return [[], creeps]
-
-    const found : Creep[] = new Array(this.positions.length)
-    const remainder : Creep[] = []
-
-    for (const creep of creeps) {
-      let positionNotFound = true
-
-      for (let i = 0; i < this.positions.length && positionNotFound; ++i) {
-        const position = this.positions[i]
-        if (atSamePosition(creep as Position, position)) {
-          if (hasActiveBodyPart(creep, this.bodyTypes[i])) {
-            found[i] = creep
-            positionNotFound = false
-          } else {
-            return [[], creeps]
-          }
-        }
-      }
-
-      if (positionNotFound) remainder.push(creep)
-    }
-
-    for (const x of found) {
-      if (x === undefined) return [[], creeps]
-    }
-
-    return [found, remainder]
-  }
-}
-
 class AndGoal implements Goal {
   goals: Goal[]
 
@@ -733,6 +690,49 @@ class OrGoal implements Goal {
     }
 
     return minCost
+  }
+}
+
+class CreepFilter {
+  bodyTypes: string[]
+  positions: Position[]
+
+  constructor (bodyTypes: string[], positions: Position[]) {
+    this.bodyTypes = bodyTypes
+    this.positions = positions
+  }
+
+  // returns [found creeps in specified order, remainder]
+  // uses all or nothing approach, if one requested is not found, all are dropped
+  filter (creeps: Creep[]) : [Creep[], Creep[]] {
+    if (this.positions.length !== this.bodyTypes.length) return [[], creeps]
+
+    const found : Creep[] = new Array(this.positions.length)
+    const remainder : Creep[] = []
+
+    for (const creep of creeps) {
+      let positionNotFound = true
+
+      for (let i = 0; i < this.positions.length && positionNotFound; ++i) {
+        const position = this.positions[i]
+        if (atSamePosition(creep as Position, position)) {
+          if (hasActiveBodyPart(creep, this.bodyTypes[i])) {
+            found[i] = creep
+            positionNotFound = false
+          } else {
+            return [[], creeps]
+          }
+        }
+      }
+
+      if (positionNotFound) remainder.push(creep)
+    }
+
+    for (const x of found) {
+      if (x === undefined) return [[], creeps]
+    }
+
+    return [found, remainder]
   }
 }
 
