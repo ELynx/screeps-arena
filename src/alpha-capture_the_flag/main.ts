@@ -365,19 +365,19 @@ class CreepLine {
     return loco!.moveTo(target, options)
   }
 
-  protected locoToWagonIndex (magicNumber: number, backwards?: boolean) : number {
-    if (backwards === true) return this.wagonToLocoIndex(magicNumber, false)
+  protected locoToWagonIndex (magicNumber: number, options?: MoreFindPathOptions) : number {
+    if (options && options.backwards === true) return this.wagonToLocoIndex(magicNumber)
     return magicNumber
   }
 
-  protected wagonToLocoIndex (magicNumber: number, backwards?: boolean) : number {
-    if (backwards === true) return this.locoToWagonIndex(magicNumber, false)
+  protected wagonToLocoIndex (magicNumber: number, options?: MoreFindPathOptions) : number {
+    if (options && options.backwards === true) return this.locoToWagonIndex(magicNumber)
     return this.creeps.length - 1 - magicNumber
   }
 
   cost (target: Position, options?: MoreFindPathOptions) {
     for (let i = 0; i < this.creeps.length; ++i) {
-      const ri = this.locoToWagonIndex(i, options.backwards)
+      const ri = this.locoToWagonIndex(i, options)
       const loco = this.creeps[ri]
       if (operational(loco)) {
         const path = searchPath(loco as Position, target, options)
@@ -400,8 +400,8 @@ class CreepLine {
     if (this.creeps.length === 1) return [OK, this.creeps[0]]
 
     for (let i = 0; i < this.creeps.length - 1; ++i) {
-      const ri0 = this.wagonToLocoIndex(i, options.backwards)
-      const ri1 = this.wagonToLocoIndex(i + 1, options.backwards)
+      const ri0 = this.wagonToLocoIndex(i, options)
+      const ri1 = this.wagonToLocoIndex(i + 1, options)
 
       const current = this.creeps[ri0]
       const next = this.creeps[ri1]
@@ -423,7 +423,7 @@ class CreepLine {
     }
 
     // return head for command
-    const locoIndex = this.locoToWagonIndex(0, options.backwards)
+    const locoIndex = this.locoToWagonIndex(0, options)
     return [OK, this.creeps[locoIndex]]
   }
 
