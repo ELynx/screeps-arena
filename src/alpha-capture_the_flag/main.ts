@@ -3,6 +3,7 @@ import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RAN
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
+import { searchPath } from 'game/path-finder'
 
 type MoreFindPathOptions = FindPathOptions & { backwards?: boolean }
 
@@ -378,7 +379,11 @@ class CreepLine {
     for (let i = 0; i < this.creeps.length; ++i) {
       const ri = this.locoToWagonIndex(i, options.backwards)
       const loco = this.creeps[ri]
-      if (operational(loco)) return getRange(loco as Position, target)
+      if (operational(loco)) {
+        const path = searchPath(loco as Position, target, options)
+        if (path.incomplete) return Number.MAX_SAFE_INTEGER
+        return path.cost / (options.plainCost || 2)
+      }
     }
 
     return Number.MAX_SAFE_INTEGER
