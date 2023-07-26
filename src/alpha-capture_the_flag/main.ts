@@ -823,16 +823,21 @@ class PositionStatistics {
     this.min = sorted[0]
     this.min2nd = sorted.length > 1 ? sorted[1] : sorted[0]
     this.max = sorted[sorted.length - 1]
-    this.median = sorted[Math.floor(this.numberOfCreeps) / 2]
+    this.median = sorted[Math.floor(sorted.length) / 2]
 
-    const ticksNow = getTicks()
-    const ticksRemaining = TICK_LIMIT - ticksNow
+    const ticksRemaining = TICK_LIMIT - getTicks()
 
-    this.canReach = Math.max(0, sorted.findIndex(
-      function (range: number) : boolean {
-        return range > ticksRemaining
-      }
-    ))
+    if (sorted[0] > ticksRemaining) {
+      this.canReach = 0
+    } else if (sorted[sorted.length - 1] <= ticksRemaining) {
+      this.canReach = sorted.length
+    } else {
+      this.canReach = sorted.findIndex(
+        function (range: number) : boolean {
+          return range > ticksRemaining
+        }
+      )
+    }
   }
 
   static forCreepsAndPosition (creeps: Creep[], position: Position) : PositionStatistics {
