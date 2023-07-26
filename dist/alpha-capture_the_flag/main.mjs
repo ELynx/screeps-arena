@@ -6,6 +6,7 @@ import { Flag } from '/arena/season_alpha/capture_the_flag/basic';
 
 // assumption, no constant given
 const MAP_SIDE_SIZE = 100;
+const MAP_SIDE_SIZE_SQRT = Math.round(Math.sqrt(MAP_SIDE_SIZE));
 const TICK_LIMIT = 2000;
 function sortById(a, b) {
     return a.id.toString().localeCompare(b.id.toString());
@@ -284,6 +285,14 @@ class CreepLine {
             return OK;
         return head.moveTo(target, options);
     }
+    cost(target, options) {
+        for (let i = this.creeps.length - 1; i >= 0; --i) {
+            const head = this.creeps[i];
+            if (operational(head))
+                return getRange(head, target);
+        }
+        return Number.MAX_SAFE_INTEGER;
+    }
     chaseHead(options) {
         const state = this.refreshState();
         if (state !== OK)
@@ -396,7 +405,7 @@ class Rotator {
 function advance(positionGoal) {
     positionGoal.advance();
 }
-class SingleCreepPositionGoal {
+class CreepPositionGoal {
     constructor(creep, position) {
         this.creep = creep;
         this.position = position;
@@ -408,44 +417,19 @@ class SingleCreepPositionGoal {
             return OK;
         return this.creep.moveTo(this.position, options);
     }
-}
-class GridPositionGoal {
-    constructor(creeps, positions) {
-        this.creeps = creeps;
-        this.positions = positions;
-    }
-    advance(options) {
-        // error case
-        if (this.creeps.length !== this.positions.length)
-            return ERR_INVALID_ARGS;
-        // elimination case
-        if (!this.creeps.some(operational))
-            return ERR_NO_BODYPART;
-        let totalRc = OK;
-        for (let i = 0; i < this.creeps.length; ++i) {
-            const creep = this.creeps[i];
-            const position = this.positions[i];
-            const oneRc = this.advanceOne(creep, position, options);
-            if (oneRc < totalRc)
-                totalRc = oneRc; // less than because error codes are negatives
-        }
-        return totalRc;
-    }
-    advanceOne(creep, position, options) {
-        if (!operational(creep))
-            return OK; // fallback for the fallen, overall group is OK
-        if (atSamePosition(creep, position))
-            return OK;
-        return creep.moveTo(position, options);
+    cost(options) {
+        if (!operational(this.creep))
+            return Number.MAX_SAFE_INTEGER;
+        return getRange(this.creep, this.position);
     }
 }
-class GridPositionGoalBuilder extends Rotator {
+class GridCreepPositionGoalBuilder extends Rotator {
     constructor(anchor) {
         super(anchor);
         this.creeps = [];
     }
     static around(position) {
-        return new GridPositionGoalBuilder(position);
+        return new GridCreepPositionGoalBuilder(position);
     }
     setOffset(offset) {
         super.setOffset(offset);
@@ -487,7 +471,13 @@ class GridPositionGoalBuilder extends Rotator {
     }
     build() {
         super.build();
-        return new GridPositionGoal(this.creeps, this.positions);
+        if (this.creeps.length !== this.positions.length)
+            return [];
+        const result = new Array(this.creeps.length);
+        for (let i = 0; i < this.creeps.length; ++i) {
+            result[i] = new CreepPositionGoal(this.creeps[i], this.positions[i]);
+        }
+        return result;
     }
 }
 class LinePositionGoal {
@@ -498,46 +488,8 @@ class LinePositionGoal {
     advance(options) {
         return this.creepLine.moveTo(this.position, options);
     }
-}
-class PositionStatistics {
-    constructor(ranges) {
-        this.numberOfCreeps = ranges.length;
-        this.min = Number.MAX_SAFE_INTEGER;
-        this.max = Number.MIN_SAFE_INTEGER;
-        this.average = NaN;
-        this.median = NaN;
-        this.canReach = 0;
-        if (this.numberOfCreeps === 0)
-            return;
-        const ticksNow = getTicks();
-        const ticksRemaining = TICK_LIMIT - ticksNow;
-        // for median
-        const sorted = ranges.sort();
-        let total = 0;
-        for (const x of sorted) {
-            if (x < this.min)
-                this.min = x;
-            if (x > this.max)
-                this.max = x;
-            this.canReach += x <= ticksRemaining ? 1 : 0;
-            total += x;
-        }
-        this.average = total / this.numberOfCreeps;
-        this.median = sorted[Math.floor(this.numberOfCreeps) / 2];
-    }
-    static forCreepsAndPosition(creeps, position) {
-        const ranges = creeps.filter(operational).map(function (creep) {
-            return getRange(position, creep);
-        });
-        return new PositionStatistics(ranges);
-    }
-    static forCreepsAndFlag(creeps, flag) {
-        if (!exists(flag))
-            return new PositionStatistics([]);
-        return PositionStatistics.forCreepsAndPosition(creeps, flag);
-    }
-    toString() {
-        return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] average [${this.average}] median [${this.median}] reach [${this.canReach}] `;
+    cost(options) {
+        return this.creepLine.cost(this.position, options);
     }
 }
 class CreepFilter {
@@ -574,6 +526,65 @@ class CreepFilter {
                 return [[], creeps];
         }
         return [found, remainder];
+    }
+}
+class AndGoal {
+    constructor(goals) {
+        this.goals = goals;
+    }
+    advance(options) {
+        if (this.goals.length === 0)
+            return ERR_INVALID_ARGS;
+        let resultRc = OK;
+        for (const goal of this.goals) {
+            const rc = goal.advance(options);
+            if (rc < resultRc)
+                resultRc = rc; // ERR_ are negative
+        }
+        return resultRc;
+    }
+    cost(options) {
+        if (this.goals.length === 0)
+            return Number.MAX_SAFE_INTEGER;
+        let maxCost = Number.MIN_SAFE_INTEGER;
+        for (const goal of this.goals) {
+            const cost = goal.cost(options);
+            if (cost > maxCost)
+                maxCost = cost;
+        }
+        return maxCost;
+    }
+}
+class OrGoal {
+    constructor(goals) {
+        this.goals = goals;
+    }
+    advance(options) {
+        if (this.goals.length === 0)
+            return ERR_INVALID_ARGS;
+        let minCost = Number.MAX_SAFE_INTEGER; // also filter out other MAX_...
+        let minIndex = -1;
+        for (let i = 0; i < this.goals.length; ++i) {
+            const goalCost = this.goals[i].cost(options);
+            if (goalCost < minCost) {
+                minCost = goalCost;
+                minIndex = i;
+            }
+        }
+        if (minIndex < 0)
+            return ERR_NO_BODYPART;
+        return this.goals[minIndex].advance(options);
+    }
+    cost(options) {
+        if (this.goals.length === 0)
+            return Number.MAX_SAFE_INTEGER;
+        let minCost = Number.MAX_SAFE_INTEGER;
+        for (const goal of this.goals) {
+            const cost = goal.cost(options);
+            if (cost < minCost)
+                minCost = cost;
+        }
+        return minCost;
     }
 }
 class CreepFilterBuilder extends Rotator {
@@ -626,19 +637,57 @@ class CreepFilterBuilder extends Rotator {
         return new CreepFilter(this.bodyTypes, this.positions);
     }
 }
+class PositionStatistics {
+    constructor(ranges) {
+        this.numberOfCreeps = ranges.length;
+        this.min = Number.MAX_SAFE_INTEGER;
+        this.min2nd = Number.MAX_SAFE_INTEGER;
+        this.max = Number.MIN_SAFE_INTEGER;
+        this.median = NaN;
+        this.canReach = 0;
+        if (this.numberOfCreeps === 0)
+            return;
+        const sorted = ranges.sort();
+        this.min = sorted[0];
+        this.min2nd = sorted.length > 1 ? sorted[1] : sorted[0];
+        this.max = sorted[sorted.length - 1];
+        this.median = sorted[Math.floor(this.numberOfCreeps) / 2];
+        const ticksNow = getTicks();
+        const ticksRemaining = TICK_LIMIT - ticksNow;
+        this.canReach = Math.max(0, sorted.findIndex(function (range) {
+            return range > ticksRemaining;
+        }));
+    }
+    static forCreepsAndPosition(creeps, position) {
+        const ranges = creeps.filter(operational).map(function (creep) {
+            return getRange(position, creep);
+        });
+        return new PositionStatistics(ranges);
+    }
+    static forCreepsAndFlag(creeps, flag) {
+        if (!exists(flag))
+            return new PositionStatistics([]);
+        return PositionStatistics.forCreepsAndPosition(creeps, flag);
+    }
+    toString() {
+        return `No [${this.numberOfCreeps}] min/2nd [${this.min}/${this.min2nd}] max [${this.max}] median [${this.median}] canReach [${this.canReach}]`;
+    }
+}
 let myFlag;
 let enemyFlag;
-let enemyStartDistance;
-const unexpectedCreepsGoals = [];
-const rushRandomAll = [];
-const rushWithTwoLines = [];
-const rushRandomWithDoorstep = [];
-const defenceGoals = [];
+const unexpecteds = [];
+const rushRandom = [];
+const rushOrganised = [];
+const powerUp = [];
+const defence = [];
+const defenceOrRushRandom = [];
+const defenceOrRushOrganised = [];
+const prepare = [];
 function handleUnexpectedCreeps(creeps) {
     for (const creep of creeps) {
         console.log('Unexpected creep ', creep);
         if (enemyFlag) {
-            unexpectedCreepsGoals.push(new SingleCreepPositionGoal(creep, enemyFlag));
+            unexpecteds.push(new CreepPositionGoal(creep, enemyFlag));
         }
     }
 }
@@ -684,104 +733,103 @@ function plan() {
         console.log('Unexpected creeps detected');
         handleUnexpectedCreeps(unexpected);
     }
-    expected.forEach(function (creep) {
-        rushRandomAll.push(new SingleCreepPositionGoal(creep, enemyFlag));
-    });
-    const doorstopFilter = CreepFilterBuilder.around(myFlag)
+    const defenceGoals = GridCreepPositionGoalBuilder.around(myFlag)
         .setOffsetXY(-3, -3)
-        .withBodyTypeAtXY(HEAL, 8, 1)
+        .withCreepToXY(expected[0], 6, 6)
+        .withCreepToXY(expected[1], 5, 5)
+        .withCreepToXY(expected[2], 6, 4)
+        .withCreepToXY(expected[3], 5, 7)
+        .withCreepToXY(expected[4], 5, 2)
+        .withCreepToXY(expected[5], 3, 5)
+        .withCreepToXY(expected[6], 4, 3)
+        .withCreepToXY(expected[7], 3, 7)
+        .withCreepToXY(expected[8], 4, 4)
+        .withCreepToXY(expected[9], 2, 5)
+        .withCreepToXY(expected[10], 7, 5)
+        .withCreepToXY(expected[11], 4, 6)
+        .withCreepToXY(expected[12], 5, 3)
+        .withCreepToXY(expected[13], 3, 3) // doorstop
         .autoRotate()
         .build();
-    const [doorstopCreeps] = doorstopFilter.filter(myPlayerInfo.creeps);
-    const doorstep = new SingleCreepPositionGoal(doorstopCreeps[0], myFlag);
-    rushWithTwoLines.push(doorstep);
-    rushRandomWithDoorstep.push(doorstep);
-    defenceGoals.push(doorstep);
-    const line1Filter = CreepFilterBuilder.around(myFlag)
-        .setOffsetXY(-3, -3)
-        .withBodyTypeAtXY(ATTACK, 8, 7)
-        .withBodyTypeAtXY(HEAL, 8, 3)
-        .withBodyTypeAtXY(RANGED_ATTACK, 8, 6)
-        .withBodyTypeAtXY(HEAL, 8, 2)
-        .withBodyTypeAtXY(RANGED_ATTACK, 8, 5)
-        // doorstep
-        .withBodyTypeAtXY(RANGED_ATTACK, 8, 4)
-        .autoRotate()
-        .build();
-    const [line1Creeps] = line1Filter.filter(myPlayerInfo.creeps);
-    rushWithTwoLines.push(new LinePositionGoal(line1Creeps, enemyFlag));
-    line1Creeps.forEach(function (creep) {
-        rushRandomWithDoorstep.push(new SingleCreepPositionGoal(creep, enemyFlag));
-    });
-    const line2Filter = CreepFilterBuilder.around(myFlag)
-        .setOffsetXY(-3, -3)
-        .withBodyTypeAtXY(ATTACK, 7, 8)
-        .withBodyTypeAtXY(HEAL, 3, 8)
-        .withBodyTypeAtXY(RANGED_ATTACK, 6, 8)
-        .withBodyTypeAtXY(HEAL, 2, 8)
-        .withBodyTypeAtXY(RANGED_ATTACK, 5, 8)
-        .withBodyTypeAtXY(HEAL, 1, 8)
-        .withBodyTypeAtXY(RANGED_ATTACK, 4, 8)
-        .autoRotate()
-        .build();
-    const [line2Creeps] = line2Filter.filter(myPlayerInfo.creeps);
-    rushWithTwoLines.push(new LinePositionGoal(line2Creeps, enemyFlag));
-    line2Creeps.forEach(function (creep) {
-        rushRandomWithDoorstep.push(new SingleCreepPositionGoal(creep, enemyFlag));
-    });
-    defenceGoals.push(GridPositionGoalBuilder.around(myFlag)
-        .setOffsetXY(-3, -3)
-        .withCreepToXY(line1Creeps[0], 4, 3)
-        .withCreepToXY(line1Creeps[1], 3, 2)
-        .withCreepToXY(line1Creeps[2], 4, 1)
-        .withCreepToXY(line1Creeps[3], 5, 2)
-        .withCreepToXY(line1Creeps[4], 6, 2)
-        .withCreepToXY(line1Creeps[5], 7, 2)
-        .withCreepToXY(line2Creeps[0], 3, 4)
-        .withCreepToXY(line2Creeps[1], 2, 3)
-        .withCreepToXY(line2Creeps[2], 1, 4)
-        .withCreepToXY(line2Creeps[3], 2, 5)
-        .withCreepToXY(line2Creeps[4], 2, 6)
-        .withCreepToXY(line2Creeps[5], 1, 6)
-        .withCreepToXY(line2Creeps[6], 2, 7)
-        .autoRotate()
-        .build());
+    for (const defenceGoal of defenceGoals) {
+        const rushGoal = new CreepPositionGoal(defenceGoal.creep, enemyFlag);
+        defence.push(defenceGoal);
+        rushRandom.push(rushGoal);
+        defenceOrRushRandom.push(new OrGoal([defenceGoal, rushGoal]));
+        // TODO actual logic, not corner hug
+        powerUp.push(defenceGoal);
+        prepare.push(defenceGoal);
+    }
+    const line1 = [defenceGoals[0], defenceGoals[10], defenceGoals[2]];
+    const line2 = [defenceGoals[4], defenceGoals[12]];
+    const line3 = [defenceGoals[6], defenceGoals[8]];
+    const line4 = [defenceGoals[1], defenceGoals[11], defenceGoals[3]];
+    const line5 = [defenceGoals[5], defenceGoals[9], defenceGoals[7]];
+    const lines = [line1, line2, line3, line4, line5];
+    for (const line of lines) {
+        const doDefence = new AndGoal(line);
+        const doOffence = new LinePositionGoal(line.map(function (goal) {
+            return goal.creep;
+        }), enemyFlag);
+        rushOrganised.push(doOffence);
+        defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]));
+    }
+    // don't forget intentional doorstep
+    rushOrganised.push(defenceGoals[13]);
+    defenceOrRushOrganised.push(defenceGoals[13]);
     console.log('Planning complete at ' + getCpuTime());
 }
 function advanceGoals() {
-    unexpectedCreepsGoals.forEach(advance);
+    unexpecteds.forEach(advance);
     if (myFlag === undefined || enemyFlag === undefined)
         return;
-    const enemyAdvance = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag);
-    if (enemyStartDistance === undefined) {
-        enemyStartDistance = enemyAdvance.min;
-    }
-    const endspiel = getTicks() >= TICK_LIMIT - (MAP_SIDE_SIZE * 2);
-    if (enemyAdvance.canReach === 0) {
-        if (endspiel) {
-            console.log('A. rushRandomAll');
-            rushRandomAll.forEach(advance);
+    const ticks = getTicks();
+    const early = ticks < MAP_SIDE_SIZE;
+    const hot = ticks > TICK_LIMIT - MAP_SIDE_SIZE;
+    const endspiel = ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2;
+    const enemyOffence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag);
+    const enemyDefence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, enemyFlag);
+    // wiped / too far away
+    // idle / castled
+    if (enemyOffence.canReach === 0 || (enemyDefence.max < MAP_SIDE_SIZE_SQRT && !early)) {
+        if (hot) {
+            console.log('A. rushRandom');
+            rushRandom.forEach(advance);
+        }
+        else if (endspiel) {
+            console.log('B. rushOrganised');
+            rushOrganised.forEach(advance);
         }
         else {
-            console.log('B. rushWithTwoLines');
-            rushWithTwoLines.forEach(advance);
+            console.log('C. powerUp');
+            powerUp.forEach(advance);
         }
         return;
     }
-    const myDefence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, myFlag);
-    if (enemyAdvance.min < enemyStartDistance && enemyAdvance.median <= myDefence.median) {
-        console.log('C. defenceGoals');
-        defenceGoals.forEach(advance);
+    // brace for early impact
+    if (early) {
+        console.log('D. defence');
+        defence.forEach(advance);
         return;
     }
-    if (endspiel) {
-        console.log('D. rushRandomWithDoorstep');
-        rushRandomWithDoorstep.forEach(advance);
+    // enemy is not wiped
+    // enemy is not hugging corner
+    // more than half enemy creeps are committed to offence
+    if (enemyOffence.median < MAP_SIDE_SIZE / 2) {
+        // continue if deep in, otherwise return and help
+        if (hot) {
+            console.log('E. rushRandomOrDefence');
+            defenceOrRushRandom.forEach(advance);
+        }
+        else {
+            console.log('F. rushOrganisedOrDefence');
+            defenceOrRushOrganised.forEach(advance);
+        }
+        return;
     }
-    else {
-        console.log('E. rushWithTwoLines');
-        rushWithTwoLines.forEach(advance);
-    }
+    // enemy is not committed to attack yet
+    console.log('G. prepare');
+    prepare.forEach(advance);
 }
 function play() {
     advanceGoals();
