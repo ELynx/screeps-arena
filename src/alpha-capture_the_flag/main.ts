@@ -522,7 +522,7 @@ class CreepPositionGoal implements Goal {
     return this.creep.moveTo(this.position, options)
   }
 
-  cost(options?: FindPathOptions): number {
+  cost (options?: FindPathOptions): number {
     if (!operational(this.creep)) return Number.MAX_SAFE_INTEGER
     return getRange(this.creep as Position, this.position)
   }
@@ -613,7 +613,7 @@ class LinePositionGoal implements Goal {
     return this.creepLine.moveTo(this.position, options)
   }
 
-  cost(options?: FindPathOptions): number {
+  cost (options?: FindPathOptions): number {
     return this.creepLine.cost(this.position, options)
   }
 }
@@ -668,10 +668,10 @@ class MultiGoal implements Goal {
     this.goals = goals
   }
 
-  advance(options?: FindPathOptions): CreepMoveResult {
+  advance (options?: FindPathOptions): CreepMoveResult {
     if (this.goals.length === 0) return ERR_INVALID_ARGS
 
-    let minCost = Number.MAX_SAFE_INTEGER // also filter out other MAX_...
+    const minCost = Number.MAX_SAFE_INTEGER // also filter out other MAX_...
     let minIndex = -1
 
     for (let i = 0; i < this.goals.length; ++i) {
@@ -685,7 +685,7 @@ class MultiGoal implements Goal {
     return this.goals[minIndex].advance(options)
   }
 
-  cost(options?: FindPathOptions): number {
+  cost (options?: FindPathOptions): number {
     if (this.goals.length === 0) return Number.MAX_SAFE_INTEGER
 
     return this.goals.map(
@@ -904,8 +904,8 @@ function advanceGoals () : void {
 
   const early = ticks < MAP_SIDE_SIZE
   const hot = ticks > TICK_LIMIT - MAP_SIDE_SIZE
-  const endspiel =ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2
-  
+  const endspiel = ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2
+
   const enemyOffence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag)
   const enemyDefence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, enemyFlag)
 
