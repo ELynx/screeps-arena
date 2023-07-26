@@ -661,7 +661,41 @@ class CreepFilter {
   }
 }
 
-class MultiGoal implements Goal {
+class AndGoal implements Goal {
+  goals: Goal[]
+
+  constructor (goals: Goal[]) {
+    this.goals = goals
+  }
+
+  advance(options?: FindPathOptions): CreepMoveResult {
+    if (this.goals.length === 0) return ERR_INVALID_ARGS
+
+    let resultRc : CreepMoveResult = OK
+
+    for (const goal of this.goals) {
+      const rc = goal.advance(options)
+      if (rc < resultRc) resultRc = rc // ERR_ are negative
+    }
+
+    return resultRc
+  }
+
+  cost(options?: FindPathOptions): number {
+    if (this.goals.length === 0) return Number.MAX_SAFE_INTEGER
+
+    let maxCost = Number.MIN_SAFE_INTEGER
+
+    for (const goal of this.goals) {
+      const cost = goal.cost(options)
+      if (cost > maxCost) maxCost = cost
+    }
+
+    return maxCost
+  }
+}
+
+class OrGoal implements Goal {
   goals: Goal[]
 
   constructor (goals: Goal[]) {
@@ -671,12 +705,13 @@ class MultiGoal implements Goal {
   advance (options?: FindPathOptions): CreepMoveResult {
     if (this.goals.length === 0) return ERR_INVALID_ARGS
 
-    const minCost = Number.MAX_SAFE_INTEGER // also filter out other MAX_...
+    let minCost = Number.MAX_SAFE_INTEGER // also filter out other MAX_...
     let minIndex = -1
 
     for (let i = 0; i < this.goals.length; ++i) {
       const goalCost = this.goals[i].cost(options)
       if (goalCost < minCost) {
+        minCost = goalCost
         minIndex = i
       }
     }
@@ -688,11 +723,14 @@ class MultiGoal implements Goal {
   cost (options?: FindPathOptions): number {
     if (this.goals.length === 0) return Number.MAX_SAFE_INTEGER
 
-    return this.goals.map(
-      function (goal: Goal) : number {
-        return goal.cost(options)
-      }
-    ).sort()[0]
+    let minCost = Number.MAX_SAFE_INTEGER
+
+    for (const goal of this.goals) {
+      const cost = goal.cost(options)
+      if (cost < minCost) minCost = cost
+    }
+
+    return minCost
   }
 }
 
@@ -886,11 +924,36 @@ function plan () : void {
     handleUnexpectedCreeps(unexpected)
   }
 
-  expected.forEach(
-    function (creep: Creep) : void {
-      rushRandom.push(new CreepPositionGoal(creep, enemyFlag as Position))
-    }
-  )
+  const defenceGoals = GridCreepPositionGoalBuilder.around(myFlag as Position)
+    .setOffsetXY(-3, -3)
+    .withCreepToXY(expected[0], 42, 42)
+    .withCreepToXY(expected[1], 42, 42)
+    .withCreepToXY(expected[2], 42, 42)
+    .withCreepToXY(expected[3], 42, 42)
+    .withCreepToXY(expected[4], 42, 42)
+    .withCreepToXY(expected[5], 42, 42)
+    .withCreepToXY(expected[6], 42, 42)
+    .withCreepToXY(expected[7], 42, 42)
+    .withCreepToXY(expected[8], 42, 42)
+    .withCreepToXY(expected[9], 42, 42)
+    .withCreepToXY(expected[10], 42, 42)
+    .withCreepToXY(expected[11], 42, 42)
+    .withCreepToXY(expected[12], 42, 42)
+    .withCreepToXY(expected[13], 42, 42)
+    .autoRotate()
+    .build()
+
+  for (const defenceGoal of defenceGoals) {
+    const rushGoal = new CreepPositionGoal(defenceGoal.creep, enemyFlag as Position)
+
+    defence.push(defenceGoal)
+    rushRandom.push(rushGoal)
+    rushRandomOrDefence.push(new OrGoal([defenceGoal, rushGoal]))
+
+    // TODO actual logic, not corner hug
+    powerUp.push(defenceGoal)
+    prepare.push(defenceGoal)
+  }
 
   console.log('Planning complete at ' + getCpuTime())
 }
