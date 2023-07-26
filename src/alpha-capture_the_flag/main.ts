@@ -938,7 +938,7 @@ function plan () : void {
     .withCreepToXY(expected[4], 5, 2)
     .withCreepToXY(expected[5], 3, 5)
     .withCreepToXY(expected[6], 4, 3)
-    .withCreepToXY(expected[7], 3, 7)
+    .withCreepToXY(expected[7], 3, 4)
     .withCreepToXY(expected[8], 4, 4)
     .withCreepToXY(expected[9], 2, 5)
     .withCreepToXY(expected[10], 7, 5)
