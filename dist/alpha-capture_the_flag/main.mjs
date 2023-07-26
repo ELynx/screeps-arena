@@ -2,6 +2,7 @@ import { StructureTower, Creep } from '/game/prototypes';
 import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, ERR_TIRED, ERR_INVALID_ARGS, TOWER_RANGE, RANGED_ATTACK_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
 import { getTicks, getCpuTime, getObjectsByPrototype, getRange, getDirection } from '/game/utils';
 import { Visual } from '/game/visual';
+import { searchPath } from '/game/path-finder';
 import { Flag } from '/arena/season_alpha/capture_the_flag/basic';
 
 // assumption, no constant given
@@ -267,33 +268,52 @@ function autoCombat() {
 class CreepLine {
     // head at index 0
     constructor(creeps) {
+        // safeguard against array modifications
         this.creeps = creeps.concat();
-        // because head at index 0
-        this.creeps.reverse();
     }
-    move(direction) {
-        const [rc, head] = this.chaseHead();
+    move(direction, options) {
+        const [rc, loco] = this.chaseLoco(options);
         if (rc !== OK)
             return rc;
-        return head.move(direction);
+        return loco.move(direction);
     }
     moveTo(target, options) {
-        const [rc, head] = this.chaseHead(options);
+        const [rc, loco] = this.chaseLoco(options);
         if (rc !== OK)
             return rc;
-        if (atSamePosition(head, target))
+        if (atSamePosition(loco, target))
             return OK;
-        return head.moveTo(target, options);
+        return loco.moveTo(target, options);
+    }
+    locoToWagonIndex(magicNumber, options) {
+        if (options && options.backwards === true)
+            return this.wagonToLocoIndex(magicNumber);
+        return magicNumber;
+    }
+    wagonToLocoIndex(magicNumber, options) {
+        if (options && options.backwards === true)
+            return this.locoToWagonIndex(magicNumber);
+        return this.creeps.length - 1 - magicNumber;
     }
     cost(target, options) {
-        for (let i = this.creeps.length - 1; i >= 0; --i) {
-            const head = this.creeps[i];
-            if (operational(head))
-                return getRange(head, target);
+        for (let i = 0; i < this.creeps.length; ++i) {
+            const ri = this.locoToWagonIndex(i, options);
+            const loco = this.creeps[ri];
+            if (operational(loco)) {
+                if (options && options.costByPath) {
+                    const path = searchPath(loco, target, options);
+                    if (path.incomplete)
+                        return Number.MAX_SAFE_INTEGER;
+                    return path.cost / (options.plainCost || 2);
+                }
+                else {
+                    return getRange(loco, target);
+                }
+            }
         }
         return Number.MAX_SAFE_INTEGER;
     }
-    chaseHead(options) {
+    chaseLoco(options) {
         const state = this.refreshState();
         if (state !== OK)
             return [state, undefined];
@@ -303,8 +323,10 @@ class CreepLine {
         if (this.creeps.length === 1)
             return [OK, this.creeps[0]];
         for (let i = 0; i < this.creeps.length - 1; ++i) {
-            const current = this.creeps[i];
-            const next = this.creeps[i + 1];
+            const ri0 = this.wagonToLocoIndex(i, options);
+            const ri1 = this.wagonToLocoIndex(i + 1, options);
+            const current = this.creeps[ri0];
+            const next = this.creeps[ri1];
             const range = getRange(current, next);
             if (range === 1) {
                 // just a step
@@ -322,7 +344,8 @@ class CreepLine {
             }
         }
         // return head for command
-        return [OK, this.creeps[this.creeps.length - 1]];
+        const locoIndex = this.locoToWagonIndex(0, options);
+        return [OK, this.creeps[locoIndex]];
     }
     refreshState() {
         this.creeps = this.creeps.filter(operational);
@@ -492,42 +515,6 @@ class LinePositionGoal {
         return this.creepLine.cost(this.position, options);
     }
 }
-class CreepFilter {
-    constructor(bodyTypes, positions) {
-        this.bodyTypes = bodyTypes;
-        this.positions = positions;
-    }
-    // returns [found creeps in specified order, remainder]
-    // uses all or nothing approach, if one requested is not found, all are dropped
-    filter(creeps) {
-        if (this.positions.length !== this.bodyTypes.length)
-            return [[], creeps];
-        const found = new Array(this.positions.length);
-        const remainder = [];
-        for (const creep of creeps) {
-            let positionNotFound = true;
-            for (let i = 0; i < this.positions.length && positionNotFound; ++i) {
-                const position = this.positions[i];
-                if (atSamePosition(creep, position)) {
-                    if (hasActiveBodyPart(creep, this.bodyTypes[i])) {
-                        found[i] = creep;
-                        positionNotFound = false;
-                    }
-                    else {
-                        return [[], creeps];
-                    }
-                }
-            }
-            if (positionNotFound)
-                remainder.push(creep);
-        }
-        for (const x of found) {
-            if (x === undefined)
-                return [[], creeps];
-        }
-        return [found, remainder];
-    }
-}
 class AndGoal {
     constructor(goals) {
         this.goals = goals;
@@ -585,6 +572,42 @@ class OrGoal {
                 minCost = cost;
         }
         return minCost;
+    }
+}
+class CreepFilter {
+    constructor(bodyTypes, positions) {
+        this.bodyTypes = bodyTypes;
+        this.positions = positions;
+    }
+    // returns [found creeps in specified order, remainder]
+    // uses all or nothing approach, if one requested is not found, all are dropped
+    filter(creeps) {
+        if (this.positions.length !== this.bodyTypes.length)
+            return [[], creeps];
+        const found = new Array(this.positions.length);
+        const remainder = [];
+        for (const creep of creeps) {
+            let positionNotFound = true;
+            for (let i = 0; i < this.positions.length && positionNotFound; ++i) {
+                const position = this.positions[i];
+                if (atSamePosition(creep, position)) {
+                    if (hasActiveBodyPart(creep, this.bodyTypes[i])) {
+                        found[i] = creep;
+                        positionNotFound = false;
+                    }
+                    else {
+                        return [[], creeps];
+                    }
+                }
+            }
+            if (positionNotFound)
+                remainder.push(creep);
+        }
+        for (const x of found) {
+            if (x === undefined)
+                return [[], creeps];
+        }
+        return [found, remainder];
     }
 }
 class CreepFilterBuilder extends Rotator {
