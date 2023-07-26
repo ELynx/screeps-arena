@@ -350,8 +350,8 @@ class CreepLine {
     this.creeps.reverse()
   }
 
-  move (direction: Direction) : CreepMoveResult {
-    const [rc, head] = this.chaseHead()
+  move (direction: Direction, options?: MoreFindPathOptions) : CreepMoveResult {
+    const [rc, head] = this.chaseHead(options)
     if (rc !== OK) return rc
 
     return head!.move(direction)
