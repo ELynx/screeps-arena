@@ -3,7 +3,6 @@ import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RAN
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
-import { searchPath } from 'game/path-finder'
 
 type MoreFindPathOptions = FindPathOptions & { backwards?: boolean }
 
@@ -648,7 +647,7 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
     this.backwards = false
   }
 
-  advance(options?: MoreFindPathOptions): CreepMoveResult {
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
     const ticks = getTicks()
 
     if (ticks >= this.canReverseTick) {
@@ -676,7 +675,7 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
     return super.advance(copyOptions)
   }
 
-  cost(options?: MoreFindPathOptions): number {
+  cost (options?: MoreFindPathOptions): number {
     if (getTicks() >= this.canReverseTick) {
       return Math.min(this.costForwards(options), this.costBackwards(options))
     }
@@ -689,12 +688,12 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
   }
 
   private costForwards (options?: MoreFindPathOptions): number {
-    const copyOptions = Object.assign(options || {}, { backwards: false });
+    const copyOptions = Object.assign(options || {}, { backwards: false })
     return super.cost(copyOptions)
   }
 
   private costBackwards (options?: MoreFindPathOptions): number {
-    const copyOptions = Object.assign(options || {}, { backwards: true });
+    const copyOptions = Object.assign(options || {}, { backwards: true })
     return super.cost(copyOptions)
   }
 }
