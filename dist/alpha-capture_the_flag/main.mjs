@@ -651,12 +651,19 @@ class PositionStatistics {
         this.min = sorted[0];
         this.min2nd = sorted.length > 1 ? sorted[1] : sorted[0];
         this.max = sorted[sorted.length - 1];
-        this.median = sorted[Math.floor(this.numberOfCreeps) / 2];
-        const ticksNow = getTicks();
-        const ticksRemaining = TICK_LIMIT - ticksNow;
-        this.canReach = Math.max(0, sorted.findIndex(function (range) {
-            return range > ticksRemaining;
-        }));
+        this.median = sorted[Math.floor(sorted.length) / 2];
+        const ticksRemaining = TICK_LIMIT - getTicks();
+        if (sorted[0] > ticksRemaining) {
+            this.canReach = 0;
+        }
+        else if (sorted[sorted.length - 1] <= ticksRemaining) {
+            this.canReach = sorted.length;
+        }
+        else {
+            this.canReach = sorted.findIndex(function (range) {
+                return range > ticksRemaining;
+            });
+        }
     }
     static forCreepsAndPosition(creeps, position) {
         const ranges = creeps.filter(operational).map(function (creep) {
@@ -742,7 +749,7 @@ function plan() {
         .withCreepToXY(expected[4], 5, 2)
         .withCreepToXY(expected[5], 3, 5)
         .withCreepToXY(expected[6], 4, 3)
-        .withCreepToXY(expected[7], 3, 7)
+        .withCreepToXY(expected[7], 3, 4)
         .withCreepToXY(expected[8], 4, 4)
         .withCreepToXY(expected[9], 2, 5)
         .withCreepToXY(expected[10], 7, 5)
@@ -786,7 +793,7 @@ function advanceGoals() {
     const ticks = getTicks();
     const early = ticks < MAP_SIDE_SIZE;
     const hot = ticks > TICK_LIMIT - MAP_SIDE_SIZE;
-    const endspiel = ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2;
+    const endspiel = ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2.5;
     const enemyOffence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag);
     const enemyDefence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, enemyFlag);
     // wiped / too far away
