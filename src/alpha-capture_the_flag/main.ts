@@ -2,6 +2,7 @@ import { Creep, CreepMoveResult, GameObject, OwnedStructure, Position, Structure
 import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
+import { searchPath } from 'game/path-finder'
 import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
 type MoreFindPathOptions = FindPathOptions & { backwards?: boolean }
