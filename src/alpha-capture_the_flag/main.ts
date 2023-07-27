@@ -1,3 +1,5 @@
+import * as gridAssign from 'grid-assign-js@0.0.2'
+
 import { Creep, CreepMoveResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
 import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
@@ -712,17 +714,60 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
   }
 }
 
+class CreepToBodyPart {
+  creep: Creep
+  bodyPart: BodyPart
+}
+
+class CreepLineToBodyPart {
+  creepLine: CreepLine
+  bodyPart: BodyPart
+}
+
+type ToBodyPart = CreepToBodyPart & CreepLineToBodyPart
+
+function validToBodyPart (toBodyPart: ToBodyPart) : boolean {
+  return toBodyPart.bodyPart.exists
+}
+
 class BodyPartGoal implements Goal {
+  creeps: Creep[]
+  creepLines: CreepLine[]
+  ongoing: ToBodyPart[]
+
   constructor () {
+    this.creeps = []
+    this.creepLines = []
+    this.ongoing = []
   }
 
   addCreep (creep: Creep) {
+    this.creeps.push(creep)
   }
 
   addCreepLine (creepLine: CreepLine) {
+    this.creepLines.push(creepLine)
   }
 
   advance(options?: MoreFindPathOptions): CreepMoveResult {
+    const taxiDriverLocations = [
+      [0, 0],
+      [1, 1],
+    ];
+    const peopleCallingTaxiLocations = [
+      [5, 4],
+      [1, 0],
+      [1, 1],
+      [-1, 1],
+    ];
+    
+    const assignments = gridAssign.assign({
+      points: peopleCallingTaxiLocations,
+      assignTo: taxiDriverLocations,
+    });
+
+    console.log(assignments)
+
     return ERR_INVALID_ARGS
   }
 
