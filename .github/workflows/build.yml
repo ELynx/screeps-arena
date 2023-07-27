@@ -43,4 +43,4 @@ jobs:
         with:
           branch: ${{ github.event.pull_request.head.ref || github.head_ref || github.ref }}
           commit_message: "[Build Typescript] Commit built code"
-          file_pattern: "package.json dist/*"
+          file_pattern: "package.json node_modules/grid-assign-js/* dist/*"
