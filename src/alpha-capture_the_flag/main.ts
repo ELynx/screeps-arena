@@ -447,6 +447,13 @@ class CreepLine {
   }
 }
 
+function operationalCreepLine (creepLine: CreepLine) : boolean {
+  for (const creep of creepLine.creeps) {
+    if (operational(creep)) return true
+  }
+  return false
+}
+
 class Rotator {
   protected anchor: Position
   protected offset: Position
@@ -637,9 +644,14 @@ class LinePositionGoal implements Goal {
   creepLine: CreepLine
   position: Position
 
-  constructor (creeps: Creep[], position: Position) {
-    this.creepLine = new CreepLine(creeps)
+  protected constructor (creepLine: CreepLine, position: Position) {
+    this.creepLine = creepLine
     this.position = position
+  }
+
+  static of (creeps: Creep[], position: Position) : LinePositionGoal {
+    const creepLine = new CreepLine(creeps)
+    return new LinePositionGoal(creepLine, position)
   }
 
   advance (options?: MoreFindPathOptions): CreepMoveResult {
@@ -655,10 +667,19 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
   canReverseTick: number // tick in future
   backwards: boolean
 
-  constructor (creeps: Creep[], position: Position) {
-    super(creeps, position)
+  protected constructor (creepLine: CreepLine, position: Position) {
+    super(creepLine, position)
     this.canReverseTick = Number.MIN_SAFE_INTEGER
     this.backwards = false
+  }
+
+  static of (creeps: Creep[], position: Position) : LinePositionGoalWithAutoReverse {
+    const creepLine = new CreepLine(creeps)
+    return new LinePositionGoalWithAutoReverse(creepLine, position)
+  }
+
+  static ofCreepLine (creepLine: CreepLine, position: Position) : LinePositionGoalWithAutoReverse {
+    return new LinePositionGoalWithAutoReverse(creepLine, position)
   }
 
   advance (options?: MoreFindPathOptions): CreepMoveResult {
@@ -715,35 +736,81 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
 }
 
 class BodyPartGoal implements Goal {
+  creeps: Creep[]
+  creepLines: CreepLine[]
+
   constructor () {
+    this.creeps = []
+    this.creepLines = []
   }
 
   addCreep (creep: Creep) {
+    this.creeps.push(creep)
   }
 
   addCreepLine (creepLine: CreepLine) {
+    this.creepLines.push(creepLine)
   }
 
   advance (options?: MoreFindPathOptions): CreepMoveResult {
-    const taxiDriverLocations = [
-      [0, 0],
-      [1, 1]
-    ]
-    const peopleCallingTaxiLocations = [
-      [5, 4],
-      [1, 0],
-      [1, 1],
-      [-1, 1]
-    ]
+    this.creeps = this.creeps.filter(operational)
+    this.creepLines = this.creepLines.filter(operationalCreepLine)
+
+    const actorPoints : number[][] = []
+
+    for (const creep of this.creeps) {
+      actorPoints.push([creep.x, creep.y])
+    }
+
+    for (const creepLine of this.creepLines) {
+      for (const creep of creepLine.creeps) {
+        if (operational(creep)) {
+          actorPoints.push([creep.x, creep.y])
+          continue // to next creepLine
+        }
+      }
+    }
+
+    const bodyParts = getObjectsByPrototype(BodyPart).filter(
+      function (bodyPart: BodyPart) : boolean {
+        return actorPoints.some(
+          function (point: number[]) : boolean {
+            return getRange(bodyPart as Position, { x: point[0], y: point[1] } as Position) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT
+          }
+        )
+      }
+    )
+
+    const targetPoints = bodyParts.map(
+      function (bodyPart: BodyPart) : number[] {
+        return [bodyPart.x, bodyPart.y]
+      }
+    )
 
     const assignments = assign({
-      points: peopleCallingTaxiLocations,
-      assignTo: taxiDriverLocations
+      points: targetPoints,
+      assignTo: actorPoints
     })
 
-    console.log(assignments)
+    let totalRc : CreepMoveResult = OK
+    for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
+      const targetIndex = assignments[actorIndex]
+      const target = bodyParts[targetIndex]
 
-    return ERR_INVALID_ARGS
+      if (actorIndex < this.creeps.length) {
+        const creep = this.creeps[actorIndex]
+        const goal = new CreepPositionGoal(creep, target as Position)
+        const rc = goal.advance(options)
+        if (rc < totalRc) totalRc = rc
+      } else {
+        const creepLine = this.creepLines[actorIndex - this.creeps.length]
+        const goal = LinePositionGoalWithAutoReverse.ofCreepLine(creepLine, target as Position)
+        const rc = goal.advance(options)
+        if (rc < totalRc) totalRc = rc
+      }
+    }
+
+    return totalRc
   }
 
   cost (options?: MoreFindPathOptions): number {
@@ -1104,7 +1171,7 @@ function plan () : void {
   const powerUp2 = new BodyPartGoal()
   for (const line of lines) {
     const doDefence = new AndGoal(line)
-    const doOffence = new LinePositionGoal(line.map(
+    const doOffence = LinePositionGoal.of(line.map(
       function (goal: CreepPositionGoal) : Creep {
         return goal.creep
       }
