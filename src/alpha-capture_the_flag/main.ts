@@ -1095,6 +1095,7 @@ function plan () : void {
 
     rushOrganised.push(doOffence)
     defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]))
+    powerUp2.add(doOffence.creepLine as Creepable)
   }
   prepare.push(powerUp2)
 
