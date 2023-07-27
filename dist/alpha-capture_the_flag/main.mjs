@@ -1,3 +1,4 @@
+import { assign as dist_2 } from './node_modules/grid-assign-js/dist/index.mjs';
 import { StructureTower, Creep } from '/game/prototypes';
 import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, ERR_TIRED, ERR_INVALID_ARGS, TOWER_RANGE, RANGED_ATTACK_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
 import { getTicks, getCpuTime, getObjectsByPrototype, getRange, getDirection } from '/game/utils';
@@ -443,7 +444,15 @@ class CreepPositionGoal {
     cost(options) {
         if (!operational(this.creep))
             return Number.MAX_SAFE_INTEGER;
-        return getRange(this.creep, this.position);
+        if (options && options.costByPath) {
+            const path = searchPath(this.creep, this.position, options);
+            if (path.incomplete)
+                return Number.MAX_SAFE_INTEGER;
+            return path.cost / (options.plainCost || 2);
+        }
+        else {
+            return getRange(this.creep, this.position);
+        }
     }
 }
 class GridCreepPositionGoalBuilder extends Rotator {
@@ -513,6 +522,36 @@ class LinePositionGoal {
     }
     cost(options) {
         return this.creepLine.cost(this.position, options);
+    }
+}
+class BodyPartGoal {
+    constructor() {
+    }
+    addCreep(creep) {
+    }
+    addCreepLine(creepLine) {
+    }
+    advance(options) {
+        const taxiDriverLocations = [
+            [0, 0],
+            [1, 1],
+        ];
+        const peopleCallingTaxiLocations = [
+            [5, 4],
+            [1, 0],
+            [1, 1],
+            [-1, 1],
+        ];
+        const assignments = dist_2({
+            points: peopleCallingTaxiLocations,
+            assignTo: taxiDriverLocations,
+        });
+        console.log(assignments);
+        return ERR_INVALID_ARGS;
+    }
+    cost(options) {
+        // too fractal to calculate
+        return MAP_SIDE_SIZE / 2;
     }
 }
 class AndGoal {
@@ -781,21 +820,22 @@ function plan() {
         .withCreepToXY(expected[13], 3, 3) // doorstop
         .autoRotate()
         .build();
+    const powerUp1 = new BodyPartGoal();
     for (const defenceGoal of defenceGoals) {
         const rushGoal = new CreepPositionGoal(defenceGoal.creep, enemyFlag);
         defence.push(defenceGoal);
         rushRandom.push(rushGoal);
         defenceOrRushRandom.push(new OrGoal([defenceGoal, rushGoal]));
-        // TODO actual logic, not corner hug
-        powerUp.push(defenceGoal);
-        prepare.push(defenceGoal);
+        powerUp1.addCreep(defenceGoal.creep);
     }
+    powerUp.push(powerUp1);
     const line1 = [defenceGoals[0], defenceGoals[10], defenceGoals[2]];
     const line2 = [defenceGoals[4], defenceGoals[12]];
     const line3 = [defenceGoals[6], defenceGoals[8]];
     const line4 = [defenceGoals[1], defenceGoals[11], defenceGoals[3]];
     const line5 = [defenceGoals[5], defenceGoals[9], defenceGoals[7]];
     const lines = [line1, line2, line3, line4, line5];
+    const powerUp2 = new BodyPartGoal();
     for (const line of lines) {
         const doDefence = new AndGoal(line);
         const doOffence = new LinePositionGoal(line.map(function (goal) {
@@ -803,10 +843,13 @@ function plan() {
         }), enemyFlag);
         rushOrganised.push(doOffence);
         defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]));
+        powerUp2.addCreepLine(doOffence.creepLine);
     }
+    prepare.push(powerUp2);
     // don't forget intentional doorstep
     rushOrganised.push(defenceGoals[13]);
     defenceOrRushOrganised.push(defenceGoals[13]);
+    prepare.push(defenceGoals[13]);
     console.log('Planning complete at ' + getCpuTime());
 }
 function advanceGoals() {
