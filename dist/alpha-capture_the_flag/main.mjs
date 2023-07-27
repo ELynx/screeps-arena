@@ -4,7 +4,7 @@ import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, RESOURCE_ENERGY, TOWE
 import { getTicks, getCpuTime, getObjectsByPrototype, getRange, getDirection } from '/game/utils';
 import { Visual } from '/game/visual';
 import { searchPath } from '/game/path-finder';
-import { Flag } from '/arena/season_alpha/capture_the_flag/basic';
+import { Flag, BodyPart } from '/arena/season_alpha/capture_the_flag/basic';
 
 // assumption, no constant given
 const MAP_SIDE_SIZE = 100;
@@ -361,6 +361,13 @@ class CreepLine {
         return OK;
     }
 }
+function operationalCreepLine(creepLine) {
+    for (const creep of creepLine.creeps) {
+        if (operational(creep))
+            return true;
+    }
+    return false;
+}
 class Rotator {
     constructor(anchor) {
         this.anchor = anchor;
@@ -513,9 +520,13 @@ class GridCreepPositionGoalBuilder extends Rotator {
     }
 }
 class LinePositionGoal {
-    constructor(creeps, position) {
-        this.creepLine = new CreepLine(creeps);
+    constructor(creepLine, position) {
+        this.creepLine = creepLine;
         this.position = position;
+    }
+    static of(creeps, position) {
+        const creepLine = new CreepLine(creeps);
+        return new LinePositionGoal(creepLine, position);
     }
     advance(options) {
         return this.creepLine.moveTo(this.position, options);
@@ -524,30 +535,121 @@ class LinePositionGoal {
         return this.creepLine.cost(this.position, options);
     }
 }
-class BodyPartGoal {
-    constructor() {
+class LinePositionGoalWithAutoReverse extends LinePositionGoal {
+    constructor(creepLine, position) {
+        super(creepLine, position);
+        this.canReverseTick = Number.MIN_SAFE_INTEGER;
+        this.backwards = false;
     }
-    addCreep(creep) {
+    static of(creeps, position) {
+        const creepLine = new CreepLine(creeps);
+        return new LinePositionGoalWithAutoReverse(creepLine, position);
     }
-    addCreepLine(creepLine) {
+    static ofCreepLine(creepLine, position) {
+        return new LinePositionGoalWithAutoReverse(creepLine, position);
     }
     advance(options) {
-        const taxiDriverLocations = [
-            [0, 0],
-            [1, 1]
-        ];
-        const peopleCallingTaxiLocations = [
-            [5, 4],
-            [1, 0],
-            [1, 1],
-            [-1, 1]
-        ];
-        const assignments = dist_2({
-            points: peopleCallingTaxiLocations,
-            assignTo: taxiDriverLocations
+        const ticks = getTicks();
+        if (ticks >= this.canReverseTick) {
+            const costByPathOptions = Object.assign(options || {}, { costByPath: true });
+            const fff = this.costForwards(costByPathOptions);
+            const bbb = this.costBackwards(costByPathOptions);
+            const delta = fff - bbb;
+            let newBackwards = this.backwards;
+            if (delta > 0) {
+                // forward is more expensive than backward
+                newBackwards = true;
+            }
+            else if (delta < 0) {
+                // backward is more expensive than forwards
+                newBackwards = false;
+            }
+            if (newBackwards !== this.backwards) {
+                this.canReverseTick = ticks + 2 * this.creepLine.creeps.length;
+                this.backwards = newBackwards;
+            }
+        }
+        const copyOptions = Object.assign(options || {}, { backwards: this.backwards });
+        return super.advance(copyOptions);
+    }
+    cost(options) {
+        if (getTicks() >= this.canReverseTick) {
+            return Math.min(this.costForwards(options), this.costBackwards(options));
+        }
+        if (this.backwards) {
+            return this.costBackwards(options);
+        }
+        else {
+            return this.costForwards(options);
+        }
+    }
+    costForwards(options) {
+        const copyOptions = Object.assign(options || {}, { backwards: false });
+        return super.cost(copyOptions);
+    }
+    costBackwards(options) {
+        const copyOptions = Object.assign(options || {}, { backwards: true });
+        return super.cost(copyOptions);
+    }
+}
+class BodyPartGoal {
+    constructor() {
+        this.creeps = [];
+        this.creepLines = [];
+    }
+    addCreep(creep) {
+        this.creeps.push(creep);
+    }
+    addCreepLine(creepLine) {
+        this.creepLines.push(creepLine);
+    }
+    advance(options) {
+        this.creeps = this.creeps.filter(operational);
+        this.creepLines = this.creepLines.filter(operationalCreepLine);
+        const actorPoints = [];
+        for (const creep of this.creeps) {
+            actorPoints.push([creep.x, creep.y]);
+        }
+        for (const creepLine of this.creepLines) {
+            for (const creep of creepLine.creeps) {
+                if (operational(creep)) {
+                    actorPoints.push([creep.x, creep.y]);
+                    continue; // to next creepLine
+                }
+            }
+        }
+        const bodyParts = getObjectsByPrototype(BodyPart).filter(function (bodyPart) {
+            return actorPoints.some(function (point) {
+                return getRange(bodyPart, { x: point[0], y: point[1] }) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT;
+            });
         });
-        console.log(assignments);
-        return ERR_INVALID_ARGS;
+        const targetPoints = bodyParts.map(function (bodyPart) {
+            return [bodyPart.x, bodyPart.y];
+        });
+        const assignments = dist_2({
+            points: targetPoints,
+            assignTo: actorPoints
+        });
+        let totalRc = OK;
+        for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
+            const targetIndex = assignments[actorIndex];
+            const target = bodyParts[targetIndex];
+            if (actorIndex < this.creeps.length) {
+                const creep = this.creeps[actorIndex];
+                const goal = new CreepPositionGoal(creep, target);
+                const rc = goal.advance(options);
+                if (rc < totalRc)
+                    totalRc = rc;
+            }
+            else {
+                const creepLine = this.creepLines[actorIndex - this.creeps.length];
+                const goal = LinePositionGoalWithAutoReverse.ofCreepLine(creepLine, target);
+                const rc = goal.advance(options);
+                if (rc < totalRc)
+                    totalRc = rc;
+            }
+        }
+        return totalRc;
     }
     cost(options) {
         // too fractal to calculate
@@ -838,7 +940,7 @@ function plan() {
     const powerUp2 = new BodyPartGoal();
     for (const line of lines) {
         const doDefence = new AndGoal(line);
-        const doOffence = new LinePositionGoal(line.map(function (goal) {
+        const doOffence = LinePositionGoal.of(line.map(function (goal) {
             return goal.creep;
         }), enemyFlag);
         rushOrganised.push(doOffence);
