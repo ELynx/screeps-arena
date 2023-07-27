@@ -714,39 +714,14 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
   }
 }
 
-class CreepToBodyPart {
-  creep: Creep
-  bodyPart: BodyPart
-}
-
-class CreepLineToBodyPart {
-  creepLine: CreepLine
-  bodyPart: BodyPart
-}
-
-type ToBodyPart = CreepToBodyPart & CreepLineToBodyPart
-
-function validToBodyPart (toBodyPart: ToBodyPart) : boolean {
-  return toBodyPart.bodyPart.exists
-}
-
 class BodyPartGoal implements Goal {
-  creeps: Creep[]
-  creepLines: CreepLine[]
-  ongoing: ToBodyPart[]
-
   constructor () {
-    this.creeps = []
-    this.creepLines = []
-    this.ongoing = []
   }
 
   addCreep (creep: Creep) {
-    this.creeps.push(creep)
   }
 
   addCreepLine (creepLine: CreepLine) {
-    this.creepLines.push(creepLine)
   }
 
   advance(options?: MoreFindPathOptions): CreepMoveResult {
