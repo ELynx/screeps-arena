@@ -548,7 +548,14 @@ class CreepPositionGoal implements Goal {
 
   cost (options?: MoreFindPathOptions): number {
     if (!operational(this.creep)) return Number.MAX_SAFE_INTEGER
-    return getRange(this.creep as Position, this.position)
+    
+    if (options && options.costByPath) {
+      const path = searchPath(this.creep as Position, this.position, options)
+      if (path.incomplete) return Number.MAX_SAFE_INTEGER
+      return path.cost / (options.plainCost || 2)
+    } else {
+      return getRange(this.creep as Position, this.position)
+    }
   }
 }
 
