@@ -445,6 +445,8 @@ class CreepLine {
   }
 }
 
+type Creepable = Creep & CreepLine
+
 class Rotator {
   protected anchor: Position
   protected offset: Position
@@ -548,7 +550,7 @@ class CreepPositionGoal implements Goal {
 
   cost (options?: MoreFindPathOptions): number {
     if (!operational(this.creep)) return Number.MAX_SAFE_INTEGER
-    
+
     if (options && options.costByPath) {
       const path = searchPath(this.creep as Position, this.position, options)
       if (path.incomplete) return Number.MAX_SAFE_INTEGER
@@ -709,6 +711,27 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
   private costBackwards (options?: MoreFindPathOptions): number {
     const copyOptions = Object.assign(options || {}, { backwards: true })
     return super.cost(copyOptions)
+  }
+}
+
+class BodyPartGoal implements Goal {
+  creepables: Creepable[]
+
+  constructor () {
+    this.creepables = []
+  }
+
+  add (creepable: Creepable) {
+    this.creepables.push(creepable)
+  }
+
+  advance(options?: MoreFindPathOptions): CreepMoveResult {
+    return ERR_TIRED
+  }
+
+  cost(options?: MoreFindPathOptions): number {
+    // too fractal
+    return MAP_SIDE_SIZE / 2
   }
 }
 
@@ -1042,6 +1065,7 @@ function plan () : void {
     .autoRotate()
     .build()
 
+  const powerUp1 = new BodyPartGoal()
   for (const defenceGoal of defenceGoals) {
     const rushGoal = new CreepPositionGoal(defenceGoal.creep, enemyFlag as Position)
 
@@ -1049,10 +1073,9 @@ function plan () : void {
     rushRandom.push(rushGoal)
     defenceOrRushRandom.push(new OrGoal([defenceGoal, rushGoal]))
 
-    // TODO actual logic, not corner hug
-    powerUp.push(defenceGoal)
-    prepare.push(defenceGoal)
+    powerUp1.add(defenceGoal.creep as Creepable)
   }
+  powerUp.push(powerUp1)
 
   const line1 : CreepPositionGoal[] = [defenceGoals[0], defenceGoals[10], defenceGoals[2]]
   const line2 : CreepPositionGoal[] = [defenceGoals[4], defenceGoals[12]]
@@ -1061,6 +1084,7 @@ function plan () : void {
   const line5 : CreepPositionGoal[] = [defenceGoals[5], defenceGoals[9], defenceGoals[7]]
   const lines : CreepPositionGoal[][] = [line1, line2, line3, line4, line5]
 
+  const powerUp2 = new BodyPartGoal()
   for (const line of lines) {
     const doDefence = new AndGoal(line)
     const doOffence = new LinePositionGoal(line.map(
@@ -1072,10 +1096,12 @@ function plan () : void {
     rushOrganised.push(doOffence)
     defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]))
   }
+  prepare.push(powerUp2)
 
   // don't forget intentional doorstep
   rushOrganised.push(defenceGoals[13])
   defenceOrRushOrganised.push(defenceGoals[13])
+  prepare.push(defenceGoals[13])
 
   console.log('Planning complete at ' + getCpuTime())
 }
