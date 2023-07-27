@@ -724,29 +724,29 @@ class BodyPartGoal implements Goal {
   addCreepLine (creepLine: CreepLine) {
   }
 
-  advance(options?: MoreFindPathOptions): CreepMoveResult {
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
     const taxiDriverLocations = [
       [0, 0],
-      [1, 1],
-    ];
+      [1, 1]
+    ]
     const peopleCallingTaxiLocations = [
       [5, 4],
       [1, 0],
       [1, 1],
-      [-1, 1],
-    ];
-    
+      [-1, 1]
+    ]
+
     const assignments = gridAssign.assign({
       points: peopleCallingTaxiLocations,
-      assignTo: taxiDriverLocations,
-    });
+      assignTo: taxiDriverLocations
+    })
 
     console.log(assignments)
 
     return ERR_INVALID_ARGS
   }
 
-  cost(options?: MoreFindPathOptions): number {
+  cost (options?: MoreFindPathOptions): number {
     // too fractal to calculate
     return MAP_SIDE_SIZE / 2
   }
