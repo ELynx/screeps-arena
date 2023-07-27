@@ -3,7 +3,7 @@ import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RAN
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { searchPath } from 'game/path-finder'
-import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
+import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
 type MoreFindPathOptions = FindPathOptions & { backwards?: boolean, costByPath?: boolean }
 
@@ -445,8 +445,6 @@ class CreepLine {
   }
 }
 
-type Creepable = Creep & CreepLine
-
 class Rotator {
   protected anchor: Position
   protected offset: Position
@@ -715,22 +713,21 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
 }
 
 class BodyPartGoal implements Goal {
-  creepables: Creepable[]
-
   constructor () {
-    this.creepables = []
   }
 
-  add (creepable: Creepable) {
-    this.creepables.push(creepable)
+  addCreep (creep: Creep) {
+  }
+
+  addCreepLine (creepLine: CreepLine) {
   }
 
   advance(options?: MoreFindPathOptions): CreepMoveResult {
-    return ERR_TIRED
+    return ERR_INVALID_ARGS
   }
 
   cost(options?: MoreFindPathOptions): number {
-    // too fractal
+    // too fractal to calculate
     return MAP_SIDE_SIZE / 2
   }
 }
@@ -1073,7 +1070,7 @@ function plan () : void {
     rushRandom.push(rushGoal)
     defenceOrRushRandom.push(new OrGoal([defenceGoal, rushGoal]))
 
-    powerUp1.add(defenceGoal.creep as Creepable)
+    powerUp1.addCreep(defenceGoal.creep)
   }
   powerUp.push(powerUp1)
 
@@ -1095,7 +1092,7 @@ function plan () : void {
 
     rushOrganised.push(doOffence)
     defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]))
-    powerUp2.add(doOffence.creepLine as Creepable)
+    powerUp2.addCreepLine(doOffence.creepLine)
   }
   prepare.push(powerUp2)
 
