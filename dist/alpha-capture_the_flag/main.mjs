@@ -534,17 +534,17 @@ class BodyPartGoal {
     advance(options) {
         const taxiDriverLocations = [
             [0, 0],
-            [1, 1],
+            [1, 1]
         ];
         const peopleCallingTaxiLocations = [
             [5, 4],
             [1, 0],
             [1, 1],
-            [-1, 1],
+            [-1, 1]
         ];
         const assignments = dist_2({
             points: peopleCallingTaxiLocations,
-            assignTo: taxiDriverLocations,
+            assignTo: taxiDriverLocations
         });
         console.log(assignments);
         return ERR_INVALID_ARGS;
