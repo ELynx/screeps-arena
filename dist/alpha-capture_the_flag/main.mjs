@@ -8,8 +8,17 @@ import { Flag, BodyPart } from '/arena/season_alpha/capture_the_flag/basic';
 
 // assumption, no constant given
 const MAP_SIDE_SIZE = 100;
-const MAP_SIDE_SIZE_SQRT = Math.round(Math.sqrt(MAP_SIDE_SIZE));
 const TICK_LIMIT = 2000;
+// derived constants
+const MAP_SIDE_SIZE_SQRT = Math.round(Math.sqrt(MAP_SIDE_SIZE));
+/**
+ * Returns number of steps on 8-direction grid from a to b
+ * @param a 1st position
+ * @param b 2nd position
+ */
+function get8WayGridRange(a, b) {
+    return Math.min(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
 function sortById(a, b) {
     return a.id.toString().localeCompare(b.id.toString());
 }
@@ -308,7 +317,7 @@ class CreepLine {
                     return path.cost / (options.plainCost || 2);
                 }
                 else {
-                    return getRange(loco, target);
+                    return get8WayGridRange(loco, target);
                 }
             }
         }
@@ -328,7 +337,7 @@ class CreepLine {
             const ri1 = this.wagonToLocoIndex(i + 1, options);
             const current = this.creeps[ri0];
             const next = this.creeps[ri1];
-            const range = getRange(current, next);
+            const range = get8WayGridRange(current, next);
             if (range === 1) {
                 // just a step
                 const direction = getDirectionByPosition(current, next);
@@ -458,7 +467,7 @@ class CreepPositionGoal {
             return path.cost / (options.plainCost || 2);
         }
         else {
-            return getRange(this.creep, this.position);
+            return get8WayGridRange(this.creep, this.position);
         }
     }
 }
@@ -616,10 +625,11 @@ class BodyPartGoal {
         for (const creep of this.creeps) {
             actorPoints.push([creep.x, creep.y]);
         }
-        // only operational left, meaning there is an operational creep
+        // only operational left, meaning there is an operational creep inside
         for (const creepLine of this.creepLines) {
             for (const creep of creepLine.creeps) {
                 if (operational(creep)) {
+                    // approximation
                     actorPoints.push([creep.x, creep.y]);
                     break; // to next creepLine
                 }
@@ -627,7 +637,7 @@ class BodyPartGoal {
         }
         const bodyParts = allBodyPards.filter(function (bodyPart) {
             return actorPoints.some(function (point) {
-                return getRange(bodyPart, { x: point[0], y: point[1] }) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT;
+                return get8WayGridRange(bodyPart, { x: point[0], y: point[1] }) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT;
             });
         });
         if (bodyParts.length === 0)
@@ -639,7 +649,7 @@ class BodyPartGoal {
             targetPoints = targetPoints.concat(targetPoints);
         }
         const screepsRange = function (p1, p2) {
-            return getRange({ x: p1[0], y: p1[0] }, { x: p2[0], y: p2[0] });
+            return get8WayGridRange({ x: p1[0], y: p1[0] }, { x: p2[0], y: p2[0] });
         };
         const assignments = assignToGrids({
             points: targetPoints,
@@ -832,7 +842,7 @@ class PositionStatistics {
         this.min = sorted[0];
         this.min2nd = sorted.length > 1 ? sorted[1] : sorted[0];
         this.max = sorted[sorted.length - 1];
-        this.median = sorted[Math.floor(sorted.length) / 2];
+        this.median = sorted[Math.floor(sorted.length / 2)];
         const ticksRemaining = TICK_LIMIT - getTicks();
         if (sorted[0] > ticksRemaining) {
             this.canReach = 0;
@@ -848,7 +858,7 @@ class PositionStatistics {
     }
     static forCreepsAndPosition(creeps, position) {
         const ranges = creeps.filter(operational).map(function (creep) {
-            return getRange(position, creep);
+            return get8WayGridRange(position, creep);
         });
         return new PositionStatistics(ranges);
     }
@@ -863,6 +873,7 @@ class PositionStatistics {
 }
 let myFlag;
 let enemyFlag;
+let flagDistance;
 const unexpecteds = [];
 const rushRandom = [];
 const rushOrganised = [];
@@ -892,6 +903,7 @@ function plan() {
         handleUnexpectedCreeps(myPlayerInfo.creeps);
         return;
     }
+    flagDistance = get8WayGridRange(myFlag, enemyFlag);
     // check if all expected creeps are in place
     const myCreepsFilter = CreepFilterBuilder.around(myFlag)
         .setOffsetXY(-3, -3)
@@ -976,14 +988,13 @@ function advanceGoals() {
     if (myFlag === undefined || enemyFlag === undefined)
         return;
     const ticks = getTicks();
-    const early = ticks < MAP_SIDE_SIZE;
+    const early = ticks < flagDistance / 2;
     const hot = ticks > TICK_LIMIT - MAP_SIDE_SIZE;
     const endspiel = ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2.5;
     const enemyOffence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag);
     const enemyDefence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, enemyFlag);
     // wiped / too far away
-    // idle / castled
-    if (enemyOffence.canReach === 0 || (enemyDefence.max < MAP_SIDE_SIZE_SQRT && !early)) {
+    if (enemyOffence.canReach === 0) {
         if (hot) {
             console.log('A. rushRandom');
             rushRandom.forEach(advance);
@@ -998,34 +1009,49 @@ function advanceGoals() {
         }
         return;
     }
+    // idle / castled
+    if (enemyDefence.max < MAP_SIDE_SIZE_SQRT) {
+        if (hot) {
+            console.log('D. rushRandom');
+            rushRandom.forEach(advance);
+        }
+        else if (endspiel) {
+            console.log('E. rushOrganised');
+            rushOrganised.forEach(advance);
+        }
+        else {
+            console.log('F. prepare');
+            prepare.forEach(advance);
+        }
+        return;
+    }
+    // enemy started moving
     // brace for early impact
     if (early) {
-        console.log('D. defence');
+        console.log('G. defence');
         defence.forEach(advance);
         return;
     }
-    // enemy is not wiped
-    // enemy is not hugging corner
     // more than half enemy creeps are committed to offence
-    if (enemyOffence.median < MAP_SIDE_SIZE / 2) {
+    if (enemyOffence.median < flagDistance / 2) {
         // continue if deep in, otherwise return and help
         if (hot) {
-            console.log('E. rushRandomOrDefence');
+            console.log('H. rushRandomOrDefence');
             defenceOrRushRandom.forEach(advance);
         }
         else {
-            console.log('F. rushOrganisedOrDefence');
+            console.log('I. rushOrganisedOrDefence');
             defenceOrRushOrganised.forEach(advance);
         }
         return;
     }
     // enemy is not committed to attack yet
-    console.log('G. prepare');
+    console.log('J. prepare');
     prepare.forEach(advance);
 }
 function play() {
-    advanceGoals();
     autoCombat();
+    advanceGoals();
 }
 
 export { loop };
