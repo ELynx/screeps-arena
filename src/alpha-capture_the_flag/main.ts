@@ -1242,8 +1242,7 @@ function advanceGoals () : void {
   const enemyDefence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, enemyFlag)
 
   // wiped / too far away
-  // idle / castled
-  if (enemyOffence.canReach === 0 || (enemyDefence.max < MAP_SIDE_SIZE_SQRT && !early)) {
+  if (enemyOffence.canReach === 0) {
     if (hot) {
       console.log('A. rushRandom')
       rushRandom.forEach(advance)
@@ -1258,24 +1257,40 @@ function advanceGoals () : void {
     return
   }
 
-  // brace for early impact
-  if (early) {
-    console.log('D. defence')
-    defence.forEach(advance)
+  // idle / castled
+  if (enemyDefence.max < MAP_SIDE_SIZE_SQRT) {
+    if (hot) {
+      console.log('D. rushRandom')
+      rushRandom.forEach(advance)
+    } else if (endspiel) {
+      console.log('E. rushOrganised')
+      rushOrganised.forEach(advance)
+    } else {
+      console.log('F. prepare')
+      prepare.forEach(advance)
+    }
+
     return
   }
 
-  // enemy is not wiped
-  // enemy is not hugging corner
+  // enemy started moving
+
+  // brace for early impact
+  if (early) {
+    console.log('G. defence')
+    defence.forEach(advance)
+
+    return
+  }
 
   // more than half enemy creeps are committed to offence
   if (enemyOffence.median < flagDistance / 2) {
     // continue if deep in, otherwise return and help
     if (hot) {
-      console.log('E. rushRandomOrDefence')
+      console.log('H. rushRandomOrDefence')
       defenceOrRushRandom.forEach(advance)
     } else {
-      console.log('F. rushOrganisedOrDefence')
+      console.log('I. rushOrganisedOrDefence')
       defenceOrRushOrganised.forEach(advance)
     }
 
@@ -1283,7 +1298,7 @@ function advanceGoals () : void {
   }
 
   // enemy is not committed to attack yet
-  console.log('G. prepare')
+  console.log('J. prepare')
   prepare.forEach(advance)
 }
 
