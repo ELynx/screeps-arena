@@ -813,14 +813,14 @@ class BodyPartGoal implements Goal {
       targetPoints = targetPoints.concat(targetPoints)
     }
 
-    const screepsRange : CostFunction = function (p1: CostPoint, p2: CostPoint) : number {
+    const get8WayGridRangeAdapter : CostFunction = function (p1: CostPoint, p2: CostPoint) : number {
       return get8WayGridRange({ x: p1[0], y: p1[0] } as Position, { x: p2[0], y: p2[0] } as Position)
     }
 
     const assignments = assignToGrids({
       points: targetPoints,
       assignTo: actorPoints,
-      distanceMetric: screepsRange
+      distanceMetric: get8WayGridRangeAdapter
     })
 
     let totalRc : CreepMoveResult = OK
