@@ -14,6 +14,11 @@ const MAP_SIDE_SIZE : number = 100
 const MAP_SIDE_SIZE_SQRT : number = Math.round(Math.sqrt(MAP_SIDE_SIZE))
 const TICK_LIMIT : number = 2000
 
+// number of steps on 8-direction grid from a to b
+function get8WayGridRange (a: Position, b: Position) : number {
+  return Math.min(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
+}
+
 function sortById (a: GameObject, b: GameObject) : number {
   return a.id.toString().localeCompare(b.id.toString())
 }
@@ -387,7 +392,7 @@ class CreepLine {
           if (path.incomplete) return Number.MAX_SAFE_INTEGER
           return path.cost / (options.plainCost || 2)
         } else {
-          return getRange(loco as Position, target)
+          return get8WayGridRange(loco as Position, target)
         }
       }
     }
@@ -412,7 +417,7 @@ class CreepLine {
       const current = this.creeps[ri0]
       const next = this.creeps[ri1]
 
-      const range = getRange(current as Position, next as Position)
+      const range = get8WayGridRange(current as Position, next as Position)
 
       if (range === 1) {
         // just a step
@@ -563,7 +568,7 @@ class CreepPositionGoal implements Goal {
       if (path.incomplete) return Number.MAX_SAFE_INTEGER
       return path.cost / (options.plainCost || 2)
     } else {
-      return getRange(this.creep as Position, this.position)
+      return get8WayGridRange(this.creep as Position, this.position)
     }
   }
 }
@@ -782,7 +787,7 @@ class BodyPartGoal implements Goal {
       function (bodyPart: BodyPart) : boolean {
         return actorPoints.some(
           function (point: CostPoint) : boolean {
-            return getRange(bodyPart as Position, { x: point[0], y: point[1] } as Position) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT
+            return get8WayGridRange(bodyPart as Position, { x: point[0], y: point[1] } as Position) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT
           }
         )
       }
@@ -801,7 +806,7 @@ class BodyPartGoal implements Goal {
     }
 
     const screepsRange : CostFunction = function (p1: CostPoint, p2: CostPoint) : number {
-      return getRange({ x: p1[0], y: p1[0] } as Position, { x: p2[0], y: p2[0] } as Position)
+      return get8WayGridRange({ x: p1[0], y: p1[0] } as Position, { x: p2[0], y: p2[0] } as Position)
     }
 
     const assignments = assignToGrids({
@@ -1063,7 +1068,7 @@ class PositionStatistics {
   static forCreepsAndPosition (creeps: Creep[], position: Position) : PositionStatistics {
     const ranges = creeps.filter(operational).map(
       function (creep: Creep) : number {
-        return getRange(position, creep as Position)
+        return get8WayGridRange(position, creep as Position)
       }
     )
 
@@ -1083,6 +1088,8 @@ class PositionStatistics {
 
 let myFlag : Flag | undefined
 let enemyFlag : Flag | undefined
+
+let flagDistance : number
 
 const unexpecteds : Goal[] = []
 const rushRandom : Goal[] = []
@@ -1116,6 +1123,8 @@ function plan () : void {
     handleUnexpectedCreeps(myPlayerInfo.creeps)
     return
   }
+
+  flagDistance = get8WayGridRange(myFlag as Position, enemyFlag as Position)
 
   // check if all expected creeps are in place
   const myCreepsFilter = CreepFilterBuilder.around(myFlag as Position)
@@ -1217,7 +1226,7 @@ function advanceGoals () : void {
 
   const ticks = getTicks()
 
-  const early = ticks < MAP_SIDE_SIZE
+  const early = ticks < flagDistance / 2
   const hot = ticks > TICK_LIMIT - MAP_SIDE_SIZE
   const endspiel = ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2.5
 
@@ -1252,7 +1261,7 @@ function advanceGoals () : void {
   // enemy is not hugging corner
 
   // more than half enemy creeps are committed to offence
-  if (enemyOffence.median < MAP_SIDE_SIZE / 2) {
+  if (enemyOffence.median < flagDistance / 2) {
     // continue if deep in, otherwise return and help
     if (hot) {
       console.log('E. rushRandomOrDefence')
