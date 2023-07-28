@@ -1,4 +1,5 @@
-import { assign } from 'grid-assign-js'
+import { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
+import assignToGrids from 'grid-assign-js/dist/lap-jv/index'
 
 import { Creep, CreepMoveResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
 import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS } from 'game/constants'
@@ -753,15 +754,22 @@ class BodyPartGoal implements Goal {
   }
 
   advance (options?: MoreFindPathOptions): CreepMoveResult {
+    const allBodyPards = getObjectsByPrototype(BodyPart)
+    if (allBodyPards.length === 0) return OK
+
     this.creeps = this.creeps.filter(operational)
     this.creepLines = this.creepLines.filter(operationalCreepLine)
 
-    const actorPoints : number[][] = []
+    if (this.creeps.length === 0 && this.creepLines.length === 0) return ERR_NO_BODYPART
 
+    const actorPoints : CostPoint[] = []
+
+    // only operational left
     for (const creep of this.creeps) {
       actorPoints.push([creep.x, creep.y])
     }
 
+    // only operational left, meaning there is an operational creep
     for (const creepLine of this.creepLines) {
       for (const creep of creepLine.creeps) {
         if (operational(creep)) {
@@ -771,40 +779,52 @@ class BodyPartGoal implements Goal {
       }
     }
 
-    const bodyParts = getObjectsByPrototype(BodyPart).filter(
+    const bodyParts = allBodyPards.filter(
       function (bodyPart: BodyPart) : boolean {
         return actorPoints.some(
-          function (point: number[]) : boolean {
+          function (point: CostPoint) : boolean {
             return getRange(bodyPart as Position, { x: point[0], y: point[1] } as Position) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT
           }
         )
       }
     )
 
-    const targetPoints = bodyParts.map(
-      function (bodyPart: BodyPart) : number[] {
+    if (bodyParts.length === 0) return OK
+
+    let targetPoints = bodyParts.map(
+      function (bodyPart: BodyPart) : CostPoint {
         return [bodyPart.x, bodyPart.y]
       }
     )
 
-    const assignments = assign({
+    while (targetPoints.length < actorPoints.length) {
+      targetPoints = targetPoints.concat(targetPoints)
+    }
+
+    const screepsRange : CostFunction = function (p1: CostPoint, p2: CostPoint) : number {
+      return getRange({ x: p1[0], y: p1[0] } as Position, { x: p2[0], y: p2[0] } as Position)
+    }
+
+    const assignments = assignToGrids({
       points: targetPoints,
-      assignTo: actorPoints
+      assignTo: actorPoints,
+      distanceMetric: screepsRange
     })
 
     let totalRc : CreepMoveResult = OK
     for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
       const targetIndex = assignments[actorIndex]
-      const target = bodyParts[targetIndex]
+      const targetPoint = targetPoints[targetIndex]
+      const target = { x: targetPoint[0], y: targetPoint[1] } as Position
 
       if (actorIndex < this.creeps.length) {
         const creep = this.creeps[actorIndex]
-        const goal = new CreepPositionGoal(creep, target as Position)
+        const goal = new CreepPositionGoal(creep, target)
         const rc = goal.advance(options)
         if (rc < totalRc) totalRc = rc
       } else {
         const creepLine = this.creepLines[actorIndex - this.creeps.length]
-        const goal = LinePositionGoalWithAutoReverse.ofCreepLine(creepLine, target as Position)
+        const goal = LinePositionGoalWithAutoReverse.ofCreepLine(creepLine, target)
         const rc = goal.advance(options)
         if (rc < totalRc) totalRc = rc
       }
