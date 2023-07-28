@@ -621,7 +621,7 @@ class BodyPartGoal {
             for (const creep of creepLine.creeps) {
                 if (operational(creep)) {
                     actorPoints.push([creep.x, creep.y]);
-                    continue; // to next creepLine
+                    break; // to next creepLine
                 }
             }
         }
