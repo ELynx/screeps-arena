@@ -18,7 +18,7 @@ const TICK_LIMIT : number = 2000
 const MAP_SIDE_SIZE_SQRT : number = Math.round(Math.sqrt(MAP_SIDE_SIZE))
 
 /**
- * Returns number of steps on 8-direction grid from a to b
+ * Returns buggy but useful distance metric
  * @param a 1st position
  * @param b 2nd position
  */
