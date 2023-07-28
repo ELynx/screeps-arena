@@ -780,10 +780,11 @@ class BodyPartGoal implements Goal {
       actorPoints.push([creep.x, creep.y])
     }
 
-    // only operational left, meaning there is an operational creep
+    // only operational left, meaning there is an operational creep inside
     for (const creepLine of this.creepLines) {
       for (const creep of creepLine.creeps) {
         if (operational(creep)) {
+          // approximation
           actorPoints.push([creep.x, creep.y])
           break // to next creepLine
         }
