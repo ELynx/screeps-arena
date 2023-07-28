@@ -1043,7 +1043,7 @@ class PositionStatistics {
     this.min = sorted[0]
     this.min2nd = sorted.length > 1 ? sorted[1] : sorted[0]
     this.max = sorted[sorted.length - 1]
-    this.median = sorted[Math.floor(sorted.length) / 2]
+    this.median = sorted[Math.floor(sorted.length / 2)]
 
     const ticksRemaining = TICK_LIMIT - getTicks()
 
