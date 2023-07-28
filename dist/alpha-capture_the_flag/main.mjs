@@ -337,7 +337,7 @@ class CreepLine {
             const ri1 = this.wagonToLocoIndex(i + 1, options);
             const current = this.creeps[ri0];
             const next = this.creeps[ri1];
-            const range = get8WayGridRange(current, next);
+            const range = getRange(current, next);
             if (range === 1) {
                 // just a step
                 const direction = getDirectionByPosition(current, next);
@@ -648,13 +648,13 @@ class BodyPartGoal {
         while (targetPoints.length < actorPoints.length) {
             targetPoints = targetPoints.concat(targetPoints);
         }
-        const screepsRange = function (p1, p2) {
+        const get8WayGridRangeAdapter = function (p1, p2) {
             return get8WayGridRange({ x: p1[0], y: p1[0] }, { x: p2[0], y: p2[0] });
         };
         const assignments = assignToGrids({
             points: targetPoints,
             assignTo: actorPoints,
-            distanceMetric: screepsRange
+            distanceMetric: get8WayGridRangeAdapter
         });
         let totalRc = OK;
         for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
@@ -874,6 +874,7 @@ class PositionStatistics {
 let myFlag;
 let enemyFlag;
 let flagDistance;
+let enemyAttacked = false;
 const unexpecteds = [];
 const rushRandom = [];
 const rushOrganised = [];
@@ -1033,14 +1034,16 @@ function advanceGoals() {
         return;
     }
     // more than half enemy creeps are committed to offence
-    if (enemyOffence.median < flagDistance / 2) {
+    // latching
+    if (enemyAttacked || enemyOffence.median < flagDistance / 2) {
+        enemyAttacked = true;
         // continue if deep in, otherwise return and help
         if (hot) {
-            console.log('H. rushRandomOrDefence');
+            console.log('H. defenceOrRushRandom');
             defenceOrRushRandom.forEach(advance);
         }
         else {
-            console.log('I. rushOrganisedOrDefence');
+            console.log('I. defenceOrRushOrganised');
             defenceOrRushOrganised.forEach(advance);
         }
         return;
