@@ -1287,10 +1287,10 @@ function advanceGoals () : void {
   if (enemyOffence.median < flagDistance / 2) {
     // continue if deep in, otherwise return and help
     if (hot) {
-      console.log('H. rushRandomOrDefence')
+      console.log('H. defenceOrRushRandom')
       defenceOrRushRandom.forEach(advance)
     } else {
-      console.log('I. rushOrganisedOrDefence')
+      console.log('I. defenceOrRushOrganised')
       defenceOrRushOrganised.forEach(advance)
     }
 
