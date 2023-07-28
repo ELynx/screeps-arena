@@ -7,14 +7,21 @@ import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { searchPath } from 'game/path-finder'
 import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
+// custom demands to navigation
 type MoreFindPathOptions = FindPathOptions & { backwards?: boolean, costByPath?: boolean }
 
 // assumption, no constant given
 const MAP_SIDE_SIZE : number = 100
-const MAP_SIDE_SIZE_SQRT : number = Math.round(Math.sqrt(MAP_SIDE_SIZE))
 const TICK_LIMIT : number = 2000
 
-// number of steps on 8-direction grid from a to b
+// derived constants
+const MAP_SIDE_SIZE_SQRT : number = Math.round(Math.sqrt(MAP_SIDE_SIZE))
+
+/**
+ * Returns number of steps on 8-direction grid from a to b
+ * @param a 1st position
+ * @param b 2nd position
+ */
 function get8WayGridRange (a: Position, b: Position) : number {
   return Math.min(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
 }
