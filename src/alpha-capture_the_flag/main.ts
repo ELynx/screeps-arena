@@ -424,7 +424,7 @@ class CreepLine {
       const current = this.creeps[ri0]
       const next = this.creeps[ri1]
 
-      const range = get8WayGridRange(current as Position, next as Position)
+      const range = getRange(current as Position, next as Position)
 
       if (range === 1) {
         // just a step
