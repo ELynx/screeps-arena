@@ -1,4 +1,4 @@
-import { assign as dist_2 } from './node_modules/grid-assign-js/dist/index.mjs';
+import assignToGrids from './node_modules/grid-assign-js/dist/lap-jv/index.mjs';
 import { StructureTower, Creep } from '/game/prototypes';
 import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, ERR_TIRED, ERR_INVALID_ARGS, TOWER_RANGE, RANGED_ATTACK_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
 import { getTicks, getCpuTime, getObjectsByPrototype, getRange, getDirection } from '/game/utils';
@@ -604,12 +604,19 @@ class BodyPartGoal {
         this.creepLines.push(creepLine);
     }
     advance(options) {
+        const allBodyPards = getObjectsByPrototype(BodyPart);
+        if (allBodyPards.length === 0)
+            return OK;
         this.creeps = this.creeps.filter(operational);
         this.creepLines = this.creepLines.filter(operationalCreepLine);
+        if (this.creeps.length === 0 && this.creepLines.length === 0)
+            return ERR_NO_BODYPART;
         const actorPoints = [];
+        // only operational left
         for (const creep of this.creeps) {
             actorPoints.push([creep.x, creep.y]);
         }
+        // only operational left, meaning there is an operational creep
         for (const creepLine of this.creepLines) {
             for (const creep of creepLine.creeps) {
                 if (operational(creep)) {
@@ -618,22 +625,32 @@ class BodyPartGoal {
                 }
             }
         }
-        const bodyParts = getObjectsByPrototype(BodyPart).filter(function (bodyPart) {
+        const bodyParts = allBodyPards.filter(function (bodyPart) {
             return actorPoints.some(function (point) {
                 return getRange(bodyPart, { x: point[0], y: point[1] }) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT;
             });
         });
-        const targetPoints = bodyParts.map(function (bodyPart) {
+        if (bodyParts.length === 0)
+            return OK;
+        let targetPoints = bodyParts.map(function (bodyPart) {
             return [bodyPart.x, bodyPart.y];
         });
-        const assignments = dist_2({
+        while (targetPoints.length < actorPoints.length) {
+            targetPoints = targetPoints.concat(targetPoints);
+        }
+        const screepsRange = function (p1, p2) {
+            return getRange({ x: p1[0], y: p1[0] }, { x: p2[0], y: p2[0] });
+        };
+        const assignments = assignToGrids({
             points: targetPoints,
-            assignTo: actorPoints
+            assignTo: actorPoints,
+            distanceMetric: screepsRange
         });
         let totalRc = OK;
         for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
             const targetIndex = assignments[actorIndex];
-            const target = bodyParts[targetIndex];
+            const targetPoint = targetPoints[targetIndex];
+            const target = { x: targetPoint[0], y: targetPoint[1] };
             if (actorIndex < this.creeps.length) {
                 const creep = this.creeps[actorIndex];
                 const goal = new CreepPositionGoal(creep, target);
