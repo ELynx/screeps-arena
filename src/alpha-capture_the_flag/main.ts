@@ -1,11 +1,12 @@
 import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
 
-import { Creep, CreepMoveResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
-import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS } from 'game/constants'
+import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
+import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { searchPath } from 'game/path-finder'
 import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
+import { CreepRangedMassAttackResult } from 'game/prototypes'
 
 // custom demands to navigation
 type MoreFindPathOptions = FindPathOptions & { backwards?: boolean, costByPath?: boolean }
@@ -107,12 +108,26 @@ function operational (something?: Structure | Creep) : boolean {
   return true
 }
 
+function _bodyPartIs (bodyPart: BodyPartType, type: string) : boolean {
+  return bodyPart.hits > 0 && bodyPart.type === type
+}
+
 function hasActiveBodyPart (creep: Creep, type: string) : boolean {
   return creep.body.some(
-    function (bodyPart) : boolean {
-      return bodyPart.hits > 0 && bodyPart.type === type
+    function (bodyPart: BodyPartType) : boolean {
+      return _bodyPartIs(bodyPart, type)
     }
   )
+}
+
+function countActiveBodyParts (creep: Creep, type: string) : number {
+  if (!operational(creep)) return 0
+
+  return creep.body.filter(
+    function (bodyPart: BodyPartType) : boolean {
+      return _bodyPartIs(bodyPart, type)
+    }
+  ).length
 }
 
 function notMaxHits (creep: Creep) : boolean {
@@ -242,8 +257,8 @@ class AttackableAndRange {
   }
 }
 
-function autoMelee (creep: Creep, attackables: Attackable[]) {
-  if (!hasActiveBodyPart(creep, ATTACK)) return
+function autoMelee (creep: Creep, attackables: Attackable[]) : CreepAttackResult {
+  if (!hasActiveBodyPart(creep, ATTACK)) return ERR_NO_BODYPART
 
   const inRange = attackables.map(
     function (target: Attackable) : AttackableAndRange {
@@ -255,19 +270,19 @@ function autoMelee (creep: Creep, attackables: Attackable[]) {
     }
   )
 
-  if (inRange.length === 0) return
+  if (inRange.length === 0) return ERR_NOT_IN_RANGE
 
   const target = inRange[0].attackable
-  creep.attack(target)
   new Visual().line(creep as Position, target as Position, { color: '#f93842' as Color } as LineVisualStyle)
+  return creep.attack(target)
 }
 
 function rangedMassAttackPower (target: AttackableAndRange) : number {
   return RANGED_ATTACK_POWER * (RANGED_ATTACK_DISTANCE_RATE[target.range] || 0)
 }
 
-function autoRanged (creep: Creep, attackables: Attackable[]) {
-  if (!hasActiveBodyPart(creep, RANGED_ATTACK)) return
+function autoRanged (creep: Creep, attackables: Attackable[]) : CreepRangedAttackResult | CreepRangedMassAttackResult{
+  if (!hasActiveBodyPart(creep, RANGED_ATTACK)) return ERR_NO_BODYPART
 
   const inRange = attackables.map(
     function (target: Attackable) : AttackableAndRange {
@@ -279,24 +294,23 @@ function autoRanged (creep: Creep, attackables: Attackable[]) {
     }
   )
 
-  if (inRange.length === 0) return
+  if (inRange.length === 0) return ERR_NOT_IN_RANGE
 
   const totalMassAttackPower = inRange.map(rangedMassAttackPower).reduce((sum, current) => sum + current, 0)
 
   if (totalMassAttackPower >= RANGED_ATTACK_POWER) {
-    creep.rangedMassAttack()
+    return creep.rangedMassAttack()
   } else {
     const target = inRange[0].attackable
-    creep.rangedAttack(target)
+    return creep.rangedAttack(target)
   }
 }
 
-function autoHeal (creep: Creep, healables: Creep[]) {
-  if (!hasActiveBodyPart(creep, HEAL)) return
+function autoHeal (creep: Creep, healables: Creep[]) : [ CreepHealResult | CreepRangedHealResult, boolean | undefined ]{
+  if (!hasActiveBodyPart(creep, HEAL)) return [ERR_NO_BODYPART, undefined]
 
   if (notMaxHits(creep)) {
-    creep.heal(creep)
-    return
+    return [creep.heal(creep), true]
   }
 
   const inRange = healables.map(
@@ -309,7 +323,7 @@ function autoHeal (creep: Creep, healables: Creep[]) {
     }
   )
 
-  if (inRange.length === 0) return
+  if (inRange.length === 0) return [ERR_NOT_IN_RANGE, undefined]
 
   const inTouch = inRange.find(
     function (target: AttackableAndRange) : boolean {
@@ -319,15 +333,19 @@ function autoHeal (creep: Creep, healables: Creep[]) {
 
   if (inTouch !== undefined) {
     const target = inTouch.attackable as Creep
-    creep.heal(target)
     new Visual().line(creep as Position, target as Position, { color: '#65fd62' as Color } as LineVisualStyle)
+    return [creep.heal(target), true]
   } else {
     const target = inRange[0].attackable as Creep
-    creep.rangedHeal(target)
+    return [creep.rangedHeal(target), false]
   }
 }
 
 function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
+  const melee = countActiveBodyParts(creep, ATTACK)
+  const ranged = countActiveBodyParts(creep, RANGED_ATTACK)
+  const heal = countActiveBodyParts(creep, HEAL)
+
   autoMelee(creep, attackables)
   autoRanged(creep, attackables)
   autoHeal(creep, healables)
