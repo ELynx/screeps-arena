@@ -1271,6 +1271,6 @@ function advanceGoals () : void {
 }
 
 function play () : void {
-  advanceGoals()
   autoCombat()
+  advanceGoals()
 }
