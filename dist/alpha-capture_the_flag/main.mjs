@@ -1034,9 +1034,11 @@ function advanceGoals() {
         return;
     }
     // more than half enemy creeps are committed to offence
-    // latching
-    if (enemyAttacked || enemyOffence.median < flagDistance / 2) {
-        enemyAttacked = true;
+    if (enemyAttacked || enemyOffence.median < flagDistance * 2 / 3) {
+        // latching after river crossing
+        if (enemyOffence.median < flagDistance / 2) {
+            enemyAttacked = true;
+        }
         // continue if deep in, otherwise return and help
         if (hot) {
             console.log('H. defenceOrRushRandom');
