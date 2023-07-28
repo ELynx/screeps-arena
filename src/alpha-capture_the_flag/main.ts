@@ -1098,6 +1098,7 @@ let myFlag : Flag | undefined
 let enemyFlag : Flag | undefined
 
 let flagDistance : number
+let enemyAttacked : boolean = false
 
 const unexpecteds : Goal[] = []
 const rushRandom : Goal[] = []
@@ -1284,7 +1285,10 @@ function advanceGoals () : void {
   }
 
   // more than half enemy creeps are committed to offence
-  if (enemyOffence.median < flagDistance / 2) {
+  // latching
+  if (enemyAttacked || enemyOffence.median < flagDistance / 2) {
+    enemyAttacked = true
+
     // continue if deep in, otherwise return and help
     if (hot) {
       console.log('H. defenceOrRushRandom')
