@@ -28,18 +28,31 @@ jobs:
       - name: Build
         run: |
           npm install
+          npm install grid-assign-js
           npm install rollup
           yarn
           npm run build
 
-      # Push new commit if applicable (for now works only on PR from same repository, not from forks)
-      - name: Prepare commit
-        run: |
-          sudo chown -Rc $UID .git/
-          git add --renormalize dist/
-      - name: Commit and push applied linter fixes
+      # Prepare folder for git
+      - name: Prepare for git
+        run: sudo chown -Rc $UID .git/
+
+      # Commit 1, logic changes
+      - name: Commit and push built code
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
           branch: ${{ github.event.pull_request.head.ref || github.head_ref || github.ref }}
           commit_message: "[Build Typescript] Commit built code"
-          file_pattern: "package.json dist/*"
+          file_pattern: "dist/* node_modules/grid-assign-js/* package.json rollup.config.js tsconfig.json"
+
+      # Lineend lint
+      - name: Prepare renormalize commit
+        run: git add --renormalize .
+
+      # Commit 2, lint
+      - name: Commit and push renormalized files
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          branch: ${{ github.event.pull_request.head.ref || github.head_ref || github.ref }}
+          commit_message: "[Build Typescript] Normalize"
+          file_pattern: ".github/* dist/* node_modules/grid-assign-js/* src/* .gitignore package.json rollup.config.js tsconfig.json"

@@ -1,12 +1,30 @@
+import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
+
 import { Creep, CreepMoveResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
 import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
-import { Flag } from 'arena/season_alpha/capture_the_flag/basic'
+import { searchPath } from 'game/path-finder'
+import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
+
+// custom demands to navigation
+type MoreFindPathOptions = FindPathOptions & { backwards?: boolean, costByPath?: boolean }
 
 // assumption, no constant given
 const MAP_SIDE_SIZE : number = 100
 const TICK_LIMIT : number = 2000
+
+// derived constants
+const MAP_SIDE_SIZE_SQRT : number = Math.round(Math.sqrt(MAP_SIDE_SIZE))
+
+/**
+ * Returns number of steps on 8-direction grid from a to b
+ * @param a 1st position
+ * @param b 2nd position
+ */
+function get8WayGridRange (a: Position, b: Position) : number {
+  return Math.min(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
+}
 
 function sortById (a: GameObject, b: GameObject) : number {
   return a.id.toString().localeCompare(b.id.toString())
@@ -341,29 +359,55 @@ class CreepLine {
 
   // head at index 0
   constructor (creeps: Creep[]) {
+    // safeguard against array modifications
     this.creeps = creeps.concat()
-
-    // because head at index 0
-    this.creeps.reverse()
   }
 
-  move (direction: Direction) : CreepMoveResult {
-    const [rc, head] = this.chaseHead()
+  move (direction: Direction, options?: MoreFindPathOptions) : CreepMoveResult {
+    const [rc, loco] = this.chaseLoco(options)
     if (rc !== OK) return rc
 
-    return head!.move(direction)
+    return loco!.move(direction)
   }
 
-  moveTo (target: Position, options?: FindPathOptions) {
-    const [rc, head] = this.chaseHead(options)
+  moveTo (target: Position, options?: MoreFindPathOptions) {
+    const [rc, loco] = this.chaseLoco(options)
     if (rc !== OK) return rc
 
-    if (atSamePosition(head! as Position, target)) return OK
+    if (atSamePosition(loco! as Position, target)) return OK
 
-    return head!.moveTo(target, options)
+    return loco!.moveTo(target, options)
   }
 
-  private chaseHead (options?: FindPathOptions) : [CreepMoveResult, Creep?] {
+  protected locoToWagonIndex (magicNumber: number, options?: MoreFindPathOptions) : number {
+    if (options && options.backwards === true) return this.wagonToLocoIndex(magicNumber)
+    return magicNumber
+  }
+
+  protected wagonToLocoIndex (magicNumber: number, options?: MoreFindPathOptions) : number {
+    if (options && options.backwards === true) return this.locoToWagonIndex(magicNumber)
+    return this.creeps.length - 1 - magicNumber
+  }
+
+  cost (target: Position, options?: MoreFindPathOptions) {
+    for (let i = 0; i < this.creeps.length; ++i) {
+      const ri = this.locoToWagonIndex(i, options)
+      const loco = this.creeps[ri]
+      if (operational(loco)) {
+        if (options && options.costByPath) {
+          const path = searchPath(loco as Position, target, options)
+          if (path.incomplete) return Number.MAX_SAFE_INTEGER
+          return path.cost / (options.plainCost || 2)
+        } else {
+          return get8WayGridRange(loco as Position, target)
+        }
+      }
+    }
+
+    return Number.MAX_SAFE_INTEGER
+  }
+
+  private chaseLoco (options?: MoreFindPathOptions) : [CreepMoveResult, Creep?] {
     const state = this.refreshState()
     if (state !== OK) return [state, undefined]
 
@@ -374,8 +418,11 @@ class CreepLine {
     if (this.creeps.length === 1) return [OK, this.creeps[0]]
 
     for (let i = 0; i < this.creeps.length - 1; ++i) {
-      const current = this.creeps[i]
-      const next = this.creeps[i + 1]
+      const ri0 = this.wagonToLocoIndex(i, options)
+      const ri1 = this.wagonToLocoIndex(i + 1, options)
+
+      const current = this.creeps[ri0]
+      const next = this.creeps[ri1]
 
       const range = getRange(current as Position, next as Position)
 
@@ -394,7 +441,8 @@ class CreepLine {
     }
 
     // return head for command
-    return [OK, this.creeps[this.creeps.length - 1]]
+    const locoIndex = this.locoToWagonIndex(0, options)
+    return [OK, this.creeps[locoIndex]]
   }
 
   private refreshState () : CreepMoveResult {
@@ -409,6 +457,13 @@ class CreepLine {
 
     return OK
   }
+}
+
+function operationalCreepLine (creepLine: CreepLine) : boolean {
+  for (const creep of creepLine.creeps) {
+    if (operational(creep)) return true
+  }
+  return false
 }
 
 class Rotator {
@@ -488,15 +543,16 @@ class Rotator {
   }
 }
 
-interface PositionGoal {
-  advance (options?: FindPathOptions) : CreepMoveResult
+interface Goal {
+  advance (options?: MoreFindPathOptions) : CreepMoveResult
+  cost (options?: MoreFindPathOptions) : number
 }
 
-function advance (positionGoal: PositionGoal) : void {
+function advance (positionGoal: Goal) : void {
   positionGoal.advance()
 }
 
-class SingleCreepPositionGoal implements PositionGoal {
+class CreepPositionGoal implements Goal {
   creep: Creep
   position: Position
 
@@ -505,49 +561,26 @@ class SingleCreepPositionGoal implements PositionGoal {
     this.position = position
   }
 
-  advance (options?: FindPathOptions): CreepMoveResult {
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
     if (!operational(this.creep)) return ERR_NO_BODYPART
     if (atSamePosition(this.creep as Position, this.position)) return OK
     return this.creep.moveTo(this.position, options)
   }
-}
 
-class GridPositionGoal implements PositionGoal {
-  creeps: Creep[]
-  positions: Position[]
+  cost (options?: MoreFindPathOptions): number {
+    if (!operational(this.creep)) return Number.MAX_SAFE_INTEGER
 
-  constructor (creeps: Creep[], positions: Position[]) {
-    this.creeps = creeps
-    this.positions = positions
-  }
-
-  advance (options?: FindPathOptions): CreepMoveResult {
-    // error case
-    if (this.creeps.length !== this.positions.length) return ERR_INVALID_ARGS
-
-    // elimination case
-    if (!this.creeps.some(operational)) return ERR_NO_BODYPART
-
-    let totalRc : CreepMoveResult = OK
-
-    for (let i = 0; i < this.creeps.length; ++i) {
-      const creep = this.creeps[i]
-      const position = this.positions[i]
-      const oneRc = this.advanceOne(creep, position, options)
-      if (oneRc < totalRc) totalRc = oneRc // less than because error codes are negatives
+    if (options && options.costByPath) {
+      const path = searchPath(this.creep as Position, this.position, options)
+      if (path.incomplete) return Number.MAX_SAFE_INTEGER
+      return path.cost / (options.plainCost || 2)
+    } else {
+      return get8WayGridRange(this.creep as Position, this.position)
     }
-
-    return totalRc
-  }
-
-  private advanceOne (creep: Creep, position: Position, options?: FindPathOptions) : CreepMoveResult {
-    if (!operational(creep)) return OK // fallback for the fallen, overall group is OK
-    if (atSamePosition(creep as Position, position)) return OK
-    return creep.moveTo(position, options)
   }
 }
 
-class GridPositionGoalBuilder extends Rotator {
+class GridCreepPositionGoalBuilder extends Rotator {
   creeps: Creep[]
 
   private constructor (anchor: Position) {
@@ -555,135 +588,339 @@ class GridPositionGoalBuilder extends Rotator {
     this.creeps = []
   }
 
-  static around (position: Position) : GridPositionGoalBuilder {
-    return new GridPositionGoalBuilder(position)
+  static around (position: Position) : GridCreepPositionGoalBuilder {
+    return new GridCreepPositionGoalBuilder(position)
   }
 
-  public setOffset (offset: Position): GridPositionGoalBuilder {
+  public setOffset (offset: Position): GridCreepPositionGoalBuilder {
     super.setOffset(offset)
     return this
   }
 
-  public setOffsetXY (x: number, y: number) : GridPositionGoalBuilder {
+  public setOffsetXY (x: number, y: number) : GridCreepPositionGoalBuilder {
     const position = { x, y } as Position
     super.setOffset(position)
     return this
   }
 
-  public withCreepToPosition (creep: Creep, position: Position) : GridPositionGoalBuilder {
+  public withCreepToPosition (creep: Creep, position: Position) : GridCreepPositionGoalBuilder {
     this.creeps.push(creep)
     super.with(position)
     return this
   }
 
-  public withCreepToXY (creep: Creep, x: number, y: number) : GridPositionGoalBuilder {
+  public withCreepToXY (creep: Creep, x: number, y: number) : GridCreepPositionGoalBuilder {
     const position = { x, y } as Position
     return this.withCreepToPosition(creep, position)
   }
 
-  public rotate0 (): GridPositionGoalBuilder {
+  public rotate0 (): GridCreepPositionGoalBuilder {
     super.rotate0()
     return this
   }
 
-  public rotate90 (): GridPositionGoalBuilder {
+  public rotate90 (): GridCreepPositionGoalBuilder {
     super.rotate90()
     return this
   }
 
-  public rotate180 (): GridPositionGoalBuilder {
+  public rotate180 (): GridCreepPositionGoalBuilder {
     super.rotate180()
     return this
   }
 
-  public rotate270 (): GridPositionGoalBuilder {
+  public rotate270 (): GridCreepPositionGoalBuilder {
     super.rotate270()
     return this
   }
 
-  public autoRotate (): GridPositionGoalBuilder {
+  public autoRotate (): GridCreepPositionGoalBuilder {
     super.autoRotate()
     return this
   }
 
-  public build () : GridPositionGoal {
+  public build () : CreepPositionGoal[] {
     super.build()
-    return new GridPositionGoal(this.creeps, this.positions)
+    if (this.creeps.length !== this.positions.length) return []
+
+    const result : CreepPositionGoal[] = new Array(this.creeps.length)
+    for (let i = 0; i < this.creeps.length; ++i) {
+      result[i] = new CreepPositionGoal(this.creeps[i], this.positions[i])
+    }
+
+    return result
   }
 }
 
-class LinePositionGoal implements PositionGoal {
+class LinePositionGoal implements Goal {
   creepLine: CreepLine
   position: Position
 
-  constructor (creeps: Creep[], position: Position) {
-    this.creepLine = new CreepLine(creeps)
+  protected constructor (creepLine: CreepLine, position: Position) {
+    this.creepLine = creepLine
     this.position = position
   }
 
-  advance (options?: FindPathOptions): CreepMoveResult {
+  static of (creeps: Creep[], position: Position) : LinePositionGoal {
+    const creepLine = new CreepLine(creeps)
+    return new LinePositionGoal(creepLine, position)
+  }
+
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
     return this.creepLine.moveTo(this.position, options)
+  }
+
+  cost (options?: MoreFindPathOptions): number {
+    return this.creepLine.cost(this.position, options)
   }
 }
 
-class PositionStatistics {
-  numberOfCreeps: number
+class LinePositionGoalWithAutoReverse extends LinePositionGoal {
+  canReverseTick: number // tick in future
+  backwards: boolean
 
-  min: number
-  max: number
-  average: number
-  median: number
-
-  canReach: number
-
-  private constructor (ranges: number[]) {
-    this.numberOfCreeps = ranges.length
-    this.min = Number.MAX_SAFE_INTEGER
-    this.max = Number.MIN_SAFE_INTEGER
-    this.average = NaN
-    this.median = NaN
-    this.canReach = 0
-
-    if (this.numberOfCreeps === 0) return
-
-    const ticksNow = getTicks()
-    const ticksRemaining = TICK_LIMIT - ticksNow
-
-    // for median
-    const sorted = ranges.sort()
-
-    let total = 0
-    for (const x of sorted) {
-      if (x < this.min) this.min = x
-      if (x > this.max) this.max = x
-
-      this.canReach += x <= ticksRemaining ? 1 : 0
-
-      total += x
-    }
-
-    this.average = total / this.numberOfCreeps
-    this.median = sorted[Math.floor(this.numberOfCreeps) / 2]
+  protected constructor (creepLine: CreepLine, position: Position) {
+    super(creepLine, position)
+    this.canReverseTick = Number.MIN_SAFE_INTEGER
+    this.backwards = false
   }
 
-  static forCreepsAndPosition (creeps: Creep[], position: Position) : PositionStatistics {
-    const ranges = creeps.filter(operational).map(
-      function (creep: Creep) : number {
-        return getRange(position, creep as Position)
+  static of (creeps: Creep[], position: Position) : LinePositionGoalWithAutoReverse {
+    const creepLine = new CreepLine(creeps)
+    return new LinePositionGoalWithAutoReverse(creepLine, position)
+  }
+
+  static ofCreepLine (creepLine: CreepLine, position: Position) : LinePositionGoalWithAutoReverse {
+    return new LinePositionGoalWithAutoReverse(creepLine, position)
+  }
+
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
+    const ticks = getTicks()
+
+    if (ticks >= this.canReverseTick) {
+      const costByPathOptions = Object.assign(options || {}, { costByPath: true })
+
+      const fff = this.costForwards(costByPathOptions)
+      const bbb = this.costBackwards(costByPathOptions)
+      const delta = fff - bbb
+
+      let newBackwards = this.backwards
+
+      if (delta > 0) {
+        // forward is more expensive than backward
+        newBackwards = true
+      } else if (delta < 0) {
+        // backward is more expensive than forwards
+        newBackwards = false
+      }
+
+      if (newBackwards !== this.backwards) {
+        this.canReverseTick = ticks + 2 * this.creepLine.creeps.length
+        this.backwards = newBackwards
+      }
+    }
+
+    const copyOptions = Object.assign(options || {}, { backwards: this.backwards })
+    return super.advance(copyOptions)
+  }
+
+  cost (options?: MoreFindPathOptions): number {
+    if (getTicks() >= this.canReverseTick) {
+      return Math.min(this.costForwards(options), this.costBackwards(options))
+    }
+
+    if (this.backwards) {
+      return this.costBackwards(options)
+    } else {
+      return this.costForwards(options)
+    }
+  }
+
+  private costForwards (options?: MoreFindPathOptions): number {
+    const copyOptions = Object.assign(options || {}, { backwards: false })
+    return super.cost(copyOptions)
+  }
+
+  private costBackwards (options?: MoreFindPathOptions): number {
+    const copyOptions = Object.assign(options || {}, { backwards: true })
+    return super.cost(copyOptions)
+  }
+}
+
+class BodyPartGoal implements Goal {
+  creeps: Creep[]
+  creepLines: CreepLine[]
+
+  constructor () {
+    this.creeps = []
+    this.creepLines = []
+  }
+
+  addCreep (creep: Creep) {
+    this.creeps.push(creep)
+  }
+
+  addCreepLine (creepLine: CreepLine) {
+    this.creepLines.push(creepLine)
+  }
+
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
+    const allBodyPards = getObjectsByPrototype(BodyPart)
+    if (allBodyPards.length === 0) return OK
+
+    this.creeps = this.creeps.filter(operational)
+    this.creepLines = this.creepLines.filter(operationalCreepLine)
+
+    if (this.creeps.length === 0 && this.creepLines.length === 0) return ERR_NO_BODYPART
+
+    const actorPoints : CostPoint[] = []
+
+    // only operational left
+    for (const creep of this.creeps) {
+      actorPoints.push([creep.x, creep.y])
+    }
+
+    // only operational left, meaning there is an operational creep inside
+    for (const creepLine of this.creepLines) {
+      for (const creep of creepLine.creeps) {
+        if (operational(creep)) {
+          // approximation
+          actorPoints.push([creep.x, creep.y])
+          break // to next creepLine
+        }
+      }
+    }
+
+    const bodyParts = allBodyPards.filter(
+      function (bodyPart: BodyPart) : boolean {
+        return actorPoints.some(
+          function (point: CostPoint) : boolean {
+            return get8WayGridRange(bodyPart as Position, { x: point[0], y: point[1] } as Position) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT
+          }
+        )
       }
     )
 
-    return new PositionStatistics(ranges)
+    if (bodyParts.length === 0) return OK
+
+    let targetPoints = bodyParts.map(
+      function (bodyPart: BodyPart) : CostPoint {
+        return [bodyPart.x, bodyPart.y]
+      }
+    )
+
+    while (targetPoints.length < actorPoints.length) {
+      targetPoints = targetPoints.concat(targetPoints)
+    }
+
+    const get8WayGridRangeAdapter : CostFunction = function (p1: CostPoint, p2: CostPoint) : number {
+      return get8WayGridRange({ x: p1[0], y: p1[0] } as Position, { x: p2[0], y: p2[0] } as Position)
+    }
+
+    const assignments = assignToGrids({
+      points: targetPoints,
+      assignTo: actorPoints,
+      distanceMetric: get8WayGridRangeAdapter
+    })
+
+    let totalRc : CreepMoveResult = OK
+    for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
+      const targetIndex = assignments[actorIndex]
+      const targetPoint = targetPoints[targetIndex]
+      const target = { x: targetPoint[0], y: targetPoint[1] } as Position
+
+      if (actorIndex < this.creeps.length) {
+        const creep = this.creeps[actorIndex]
+        const goal = new CreepPositionGoal(creep, target)
+        const rc = goal.advance(options)
+        if (rc < totalRc) totalRc = rc
+      } else {
+        const creepLine = this.creepLines[actorIndex - this.creeps.length]
+        const goal = LinePositionGoalWithAutoReverse.ofCreepLine(creepLine, target)
+        const rc = goal.advance(options)
+        if (rc < totalRc) totalRc = rc
+      }
+    }
+
+    return totalRc
   }
 
-  static forCreepsAndFlag (creeps: Creep[], flag?: Flag) : PositionStatistics {
-    if (!exists(flag)) return new PositionStatistics([])
+  cost (options?: MoreFindPathOptions): number {
+    // too fractal to calculate
+    return MAP_SIDE_SIZE / 2
+  }
+}
 
-    return PositionStatistics.forCreepsAndPosition(creeps, flag! as Position)
+class AndGoal implements Goal {
+  goals: Goal[]
+
+  constructor (goals: Goal[]) {
+    this.goals = goals
   }
 
-  toString () : string {
-    return `No [${this.numberOfCreeps}] min [${this.min}] max [${this.max}] average [${this.average}] median [${this.median}] reach [${this.canReach}] `
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
+    if (this.goals.length === 0) return ERR_INVALID_ARGS
+
+    let resultRc : CreepMoveResult = OK
+
+    for (const goal of this.goals) {
+      const rc = goal.advance(options)
+      if (rc < resultRc) resultRc = rc // ERR_ are negative
+    }
+
+    return resultRc
+  }
+
+  cost (options?: MoreFindPathOptions): number {
+    if (this.goals.length === 0) return Number.MAX_SAFE_INTEGER
+
+    let maxCost = Number.MIN_SAFE_INTEGER
+
+    for (const goal of this.goals) {
+      const cost = goal.cost(options)
+      if (cost > maxCost) maxCost = cost
+    }
+
+    return maxCost
+  }
+}
+
+class OrGoal implements Goal {
+  goals: Goal[]
+
+  constructor (goals: Goal[]) {
+    this.goals = goals
+  }
+
+  advance (options?: MoreFindPathOptions): CreepMoveResult {
+    if (this.goals.length === 0) return ERR_INVALID_ARGS
+
+    let minCost = Number.MAX_SAFE_INTEGER // also filter out other MAX_...
+    let minIndex = -1
+
+    for (let i = 0; i < this.goals.length; ++i) {
+      const goalCost = this.goals[i].cost(options)
+      if (goalCost < minCost) {
+        minCost = goalCost
+        minIndex = i
+      }
+    }
+
+    if (minIndex < 0) return ERR_NO_BODYPART
+    return this.goals[minIndex].advance(options)
+  }
+
+  cost (options?: MoreFindPathOptions): number {
+    if (this.goals.length === 0) return Number.MAX_SAFE_INTEGER
+
+    let minCost = Number.MAX_SAFE_INTEGER
+
+    for (const goal of this.goals) {
+      const cost = goal.cost(options)
+      if (cost < minCost) minCost = cost
+    }
+
+    return minCost
   }
 }
 
@@ -794,22 +1031,89 @@ class CreepFilterBuilder extends Rotator {
   }
 }
 
+class PositionStatistics {
+  numberOfCreeps: number
+
+  min: number
+  min2nd: number
+  max: number
+  median: number
+
+  canReach: number
+
+  private constructor (ranges: number[]) {
+    this.numberOfCreeps = ranges.length
+    this.min = Number.MAX_SAFE_INTEGER
+    this.min2nd = Number.MAX_SAFE_INTEGER
+    this.max = Number.MIN_SAFE_INTEGER
+    this.median = NaN
+    this.canReach = 0
+
+    if (this.numberOfCreeps === 0) return
+
+    const sorted = ranges.sort()
+
+    this.min = sorted[0]
+    this.min2nd = sorted.length > 1 ? sorted[1] : sorted[0]
+    this.max = sorted[sorted.length - 1]
+    this.median = sorted[Math.floor(sorted.length / 2)]
+
+    const ticksRemaining = TICK_LIMIT - getTicks()
+
+    if (sorted[0] > ticksRemaining) {
+      this.canReach = 0
+    } else if (sorted[sorted.length - 1] <= ticksRemaining) {
+      this.canReach = sorted.length
+    } else {
+      this.canReach = sorted.findIndex(
+        function (range: number) : boolean {
+          return range > ticksRemaining
+        }
+      )
+    }
+  }
+
+  static forCreepsAndPosition (creeps: Creep[], position: Position) : PositionStatistics {
+    const ranges = creeps.filter(operational).map(
+      function (creep: Creep) : number {
+        return get8WayGridRange(position, creep as Position)
+      }
+    )
+
+    return new PositionStatistics(ranges)
+  }
+
+  static forCreepsAndFlag (creeps: Creep[], flag?: Flag) : PositionStatistics {
+    if (!exists(flag)) return new PositionStatistics([])
+
+    return PositionStatistics.forCreepsAndPosition(creeps, flag! as Position)
+  }
+
+  toString () : string {
+    return `No [${this.numberOfCreeps}] min/2nd [${this.min}/${this.min2nd}] max [${this.max}] median [${this.median}] canReach [${this.canReach}]`
+  }
+}
+
 let myFlag : Flag | undefined
 let enemyFlag : Flag | undefined
 
-let enemyStartDistance : number
+let flagDistance : number
+let enemyAttacked : boolean = false
 
-const unexpectedCreepsGoals : PositionGoal[] = []
-const rushRandomAll : PositionGoal[] = []
-const rushWithTwoLines : PositionGoal[] = []
-const rushRandomWithDoorstep : PositionGoal[] = []
-const defenceGoals : PositionGoal[] = []
+const unexpecteds : Goal[] = []
+const rushRandom : Goal[] = []
+const rushOrganised : Goal[] = []
+const powerUp : Goal[] = []
+const defence : Goal[] = []
+const defenceOrRushRandom : Goal[] = []
+const defenceOrRushOrganised : Goal [] = []
+const prepare : Goal[] = []
 
 function handleUnexpectedCreeps (creeps: Creep[]) : void {
   for (const creep of creeps) {
     console.log('Unexpected creep ', creep)
     if (enemyFlag) {
-      unexpectedCreepsGoals.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
+      unexpecteds.push(new CreepPositionGoal(creep, enemyFlag as Position))
     }
   }
 }
@@ -828,6 +1132,8 @@ function plan () : void {
     handleUnexpectedCreeps(myPlayerInfo.creeps)
     return
   }
+
+  flagDistance = get8WayGridRange(myFlag as Position, enemyFlag as Position)
 
   // check if all expected creeps are in place
   const myCreepsFilter = CreepFilterBuilder.around(myFlag as Position)
@@ -861,124 +1167,148 @@ function plan () : void {
     handleUnexpectedCreeps(unexpected)
   }
 
-  expected.forEach(
-    function (creep: Creep) : void {
-      rushRandomAll.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
-    }
-  )
-
-  const doorstopFilter = CreepFilterBuilder.around(myFlag as Position)
+  const defenceGoals = GridCreepPositionGoalBuilder.around(myFlag as Position)
     .setOffsetXY(-3, -3)
-    .withBodyTypeAtXY(HEAL, 8, 1)
+    .withCreepToXY(expected[0], 6, 6)
+    .withCreepToXY(expected[1], 5, 5)
+    .withCreepToXY(expected[2], 6, 4)
+    .withCreepToXY(expected[3], 5, 7)
+    .withCreepToXY(expected[4], 5, 2)
+    .withCreepToXY(expected[5], 3, 5)
+    .withCreepToXY(expected[6], 4, 3)
+    .withCreepToXY(expected[7], 3, 4)
+    .withCreepToXY(expected[8], 4, 4)
+    .withCreepToXY(expected[9], 2, 5)
+    .withCreepToXY(expected[10], 7, 5)
+    .withCreepToXY(expected[11], 4, 6)
+    .withCreepToXY(expected[12], 5, 3)
+    .withCreepToXY(expected[13], 3, 3) // doorstop
     .autoRotate()
     .build()
-  const [doorstopCreeps] = doorstopFilter.filter(myPlayerInfo.creeps)
-  const doorstep = new SingleCreepPositionGoal(doorstopCreeps[0], myFlag as Position)
-  rushWithTwoLines.push(doorstep)
-  rushRandomWithDoorstep.push(doorstep)
-  defenceGoals.push(doorstep)
 
-  const line1Filter = CreepFilterBuilder.around(myFlag as Position)
-    .setOffsetXY(-3, -3)
-    .withBodyTypeAtXY(ATTACK, 8, 7)
-    .withBodyTypeAtXY(HEAL, 8, 3)
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 6)
-    .withBodyTypeAtXY(HEAL, 8, 2)
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 5)
-    // doorstep
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 4)
-    .autoRotate()
-    .build()
-  const [line1Creeps] = line1Filter.filter(myPlayerInfo.creeps)
-  rushWithTwoLines.push(new LinePositionGoal(line1Creeps, enemyFlag as Position))
-  line1Creeps.forEach(
-    function (creep: Creep) : void {
-      rushRandomWithDoorstep.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
-    }
-  )
+  const powerUp1 = new BodyPartGoal()
+  for (const defenceGoal of defenceGoals) {
+    const rushGoal = new CreepPositionGoal(defenceGoal.creep, enemyFlag as Position)
 
-  const line2Filter = CreepFilterBuilder.around(myFlag as Position)
-    .setOffsetXY(-3, -3)
-    .withBodyTypeAtXY(ATTACK, 7, 8)
-    .withBodyTypeAtXY(HEAL, 3, 8)
-    .withBodyTypeAtXY(RANGED_ATTACK, 6, 8)
-    .withBodyTypeAtXY(HEAL, 2, 8)
-    .withBodyTypeAtXY(RANGED_ATTACK, 5, 8)
-    .withBodyTypeAtXY(HEAL, 1, 8)
-    .withBodyTypeAtXY(RANGED_ATTACK, 4, 8)
-    .autoRotate()
-    .build()
-  const [line2Creeps] = line2Filter.filter(myPlayerInfo.creeps)
-  rushWithTwoLines.push(new LinePositionGoal(line2Creeps, enemyFlag as Position))
-  line2Creeps.forEach(
-    function (creep: Creep) : void {
-      rushRandomWithDoorstep.push(new SingleCreepPositionGoal(creep, enemyFlag as Position))
-    }
-  )
+    defence.push(defenceGoal)
+    rushRandom.push(rushGoal)
+    defenceOrRushRandom.push(new OrGoal([defenceGoal, rushGoal]))
 
-  defenceGoals.push(
-    GridPositionGoalBuilder.around(myFlag as Position)
-      .setOffsetXY(-3, -3)
-      .withCreepToXY(line1Creeps[0], 4, 3)
-      .withCreepToXY(line1Creeps[1], 3, 2)
-      .withCreepToXY(line1Creeps[2], 4, 1)
-      .withCreepToXY(line1Creeps[3], 5, 2)
-      .withCreepToXY(line1Creeps[4], 6, 2)
-      .withCreepToXY(line1Creeps[5], 7, 2)
-      .withCreepToXY(line2Creeps[0], 3, 4)
-      .withCreepToXY(line2Creeps[1], 2, 3)
-      .withCreepToXY(line2Creeps[2], 1, 4)
-      .withCreepToXY(line2Creeps[3], 2, 5)
-      .withCreepToXY(line2Creeps[4], 2, 6)
-      .withCreepToXY(line2Creeps[5], 1, 6)
-      .withCreepToXY(line2Creeps[6], 2, 7)
-      .autoRotate()
-      .build()
-  )
+    powerUp1.addCreep(defenceGoal.creep)
+  }
+  powerUp.push(powerUp1)
+
+  const line1 : CreepPositionGoal[] = [defenceGoals[0], defenceGoals[10], defenceGoals[2]]
+  const line2 : CreepPositionGoal[] = [defenceGoals[4], defenceGoals[12]]
+  const line3 : CreepPositionGoal[] = [defenceGoals[6], defenceGoals[8]]
+  const line4 : CreepPositionGoal[] = [defenceGoals[1], defenceGoals[11], defenceGoals[3]]
+  const line5 : CreepPositionGoal[] = [defenceGoals[5], defenceGoals[9], defenceGoals[7]]
+  const lines : CreepPositionGoal[][] = [line1, line2, line3, line4, line5]
+
+  const powerUp2 = new BodyPartGoal()
+  for (const line of lines) {
+    const doDefence = new AndGoal(line)
+    const doOffence = LinePositionGoal.of(line.map(
+      function (goal: CreepPositionGoal) : Creep {
+        return goal.creep
+      }
+    ), enemyFlag as Position)
+
+    rushOrganised.push(doOffence)
+    defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]))
+    powerUp2.addCreepLine(doOffence.creepLine)
+  }
+  prepare.push(powerUp2)
+
+  // don't forget intentional doorstep
+  rushOrganised.push(defenceGoals[13])
+  defenceOrRushOrganised.push(defenceGoals[13])
+  prepare.push(defenceGoals[13])
 
   console.log('Planning complete at ' + getCpuTime())
 }
 
 function advanceGoals () : void {
-  unexpectedCreepsGoals.forEach(advance)
+  unexpecteds.forEach(advance)
 
   if (myFlag === undefined || enemyFlag === undefined) return
 
-  const enemyAdvance = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag)
-  if (enemyStartDistance === undefined) {
-    enemyStartDistance = enemyAdvance.min
-  }
+  const ticks = getTicks()
 
-  const endspiel : boolean = getTicks() >= TICK_LIMIT - (MAP_SIDE_SIZE * 2)
+  const early = ticks < flagDistance / 2
+  const hot = ticks > TICK_LIMIT - MAP_SIDE_SIZE
+  const endspiel = ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2.5
 
-  if (enemyAdvance.canReach === 0) {
-    if (endspiel) {
-      console.log('A. rushRandomAll')
-      rushRandomAll.forEach(advance)
+  const enemyOffence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag)
+  const enemyDefence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, enemyFlag)
+
+  // wiped / too far away
+  if (enemyOffence.canReach === 0) {
+    if (hot) {
+      console.log('A. rushRandom')
+      rushRandom.forEach(advance)
+    } else if (endspiel) {
+      console.log('B. rushOrganised')
+      rushOrganised.forEach(advance)
     } else {
-      console.log('B. rushWithTwoLines')
-      rushWithTwoLines.forEach(advance)
+      console.log('C. powerUp')
+      powerUp.forEach(advance)
     }
+
     return
   }
 
-  const myDefence = PositionStatistics.forCreepsAndFlag(myPlayerInfo.creeps, myFlag)
-  if (enemyAdvance.min < enemyStartDistance && enemyAdvance.median <= myDefence.median) {
-    console.log('C. defenceGoals')
-    defenceGoals.forEach(advance)
+  // idle / castled
+  if (enemyDefence.max < MAP_SIDE_SIZE_SQRT) {
+    if (hot) {
+      console.log('D. rushRandom')
+      rushRandom.forEach(advance)
+    } else if (endspiel) {
+      console.log('E. rushOrganised')
+      rushOrganised.forEach(advance)
+    } else {
+      console.log('F. prepare')
+      prepare.forEach(advance)
+    }
+
     return
   }
 
-  if (endspiel) {
-    console.log('D. rushRandomWithDoorstep')
-    rushRandomWithDoorstep.forEach(advance)
-  } else {
-    console.log('E. rushWithTwoLines')
-    rushWithTwoLines.forEach(advance)
+  // enemy started moving
+
+  // brace for early impact
+  if (early) {
+    console.log('G. defence')
+    defence.forEach(advance)
+
+    return
   }
+
+  // more than half enemy creeps are committed to offence
+  if (enemyAttacked || enemyOffence.median < flagDistance * 2 / 3) {
+    // latching after river crossing
+    if (enemyOffence.median < flagDistance / 2) {
+      enemyAttacked = true
+    }
+
+    // continue if deep in, otherwise return and help
+    if (hot) {
+      console.log('H. defenceOrRushRandom')
+      defenceOrRushRandom.forEach(advance)
+    } else {
+      console.log('I. defenceOrRushOrganised')
+      defenceOrRushOrganised.forEach(advance)
+    }
+
+    return
+  }
+
+  // enemy is not committed to attack yet
+  console.log('J. prepare')
+  prepare.forEach(advance)
 }
 
 function play () : void {
-  advanceGoals()
   autoCombat()
+  advanceGoals()
 }
