@@ -258,8 +258,6 @@ class AttackableAndRange {
 }
 
 function autoMelee (creep: Creep, attackables: Attackable[]) : CreepAttackResult {
-  if (!hasActiveBodyPart(creep, ATTACK)) return ERR_NO_BODYPART
-
   const inRange = attackables.map(
     function (target: Attackable) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
@@ -281,9 +279,7 @@ function rangedMassAttackPower (target: AttackableAndRange) : number {
   return RANGED_ATTACK_POWER * (RANGED_ATTACK_DISTANCE_RATE[target.range] || 0)
 }
 
-function autoRanged (creep: Creep, attackables: Attackable[]) : CreepRangedAttackResult | CreepRangedMassAttackResult{
-  if (!hasActiveBodyPart(creep, RANGED_ATTACK)) return ERR_NO_BODYPART
-
+function autoRanged (creep: Creep, attackables: Attackable[]) : CreepRangedAttackResult | CreepRangedMassAttackResult {
   const inRange = attackables.map(
     function (target: Attackable) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
@@ -306,11 +302,9 @@ function autoRanged (creep: Creep, attackables: Attackable[]) : CreepRangedAttac
   }
 }
 
-function autoHeal (creep: Creep, healables: Creep[]) : [ CreepHealResult | CreepRangedHealResult, boolean | undefined ]{
-  if (!hasActiveBodyPart(creep, HEAL)) return [ERR_NO_BODYPART, undefined]
-
+function autoHeal (creep: Creep, healables: Creep[]) : CreepHealResult {
   if (notMaxHits(creep)) {
-    return [creep.heal(creep), true]
+    return creep.heal(creep)
   }
 
   const inRange = healables.map(
@@ -319,26 +313,32 @@ function autoHeal (creep: Creep, healables: Creep[]) : [ CreepHealResult | Creep
     }
   ).filter(
     function (target: AttackableAndRange) : boolean {
-      return target.range <= 3
-    }
-  )
-
-  if (inRange.length === 0) return [ERR_NOT_IN_RANGE, undefined]
-
-  const inTouch = inRange.find(
-    function (target: AttackableAndRange) : boolean {
       return target.range <= 1
     }
   )
 
-  if (inTouch !== undefined) {
-    const target = inTouch.attackable as Creep
-    new Visual().line(creep as Position, target as Position, { color: '#65fd62' as Color } as LineVisualStyle)
-    return [creep.heal(target), true]
-  } else {
-    const target = inRange[0].attackable as Creep
-    return [creep.rangedHeal(target), false]
-  }
+  if (inRange.length === 0) return ERR_NOT_IN_RANGE
+
+  const target = inRange[0].attackable as Creep
+  new Visual().line(creep as Position, target as Position, { color: '#65fd62' as Color } as LineVisualStyle)
+  return creep.heal(target)
+}
+
+function autoRangedHeal (creep: Creep, healables: Creep[]) : CreepRangedHealResult {
+  const inRange = healables.map(
+    function (target: Creep) : AttackableAndRange {
+      return new AttackableAndRange(creep, target)
+    }
+  ).filter(
+    function (target: AttackableAndRange) : boolean {
+      return target.range <= 3 && target.attackable.id !== creep.id
+    }
+  )
+
+  if (inRange.length === 0) return ERR_NOT_IN_RANGE
+
+  const target = inRange[0].attackable as Creep
+  return creep.rangedHeal(target)
 }
 
 function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
@@ -349,6 +349,7 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   autoMelee(creep, attackables)
   autoRanged(creep, attackables)
   autoHeal(creep, healables)
+  autoRangedHeal(creep, healables)
 }
 
 function autoCombat () {
