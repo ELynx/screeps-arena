@@ -436,6 +436,19 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
     autoRangedAttack(creep, attackables)
     return
   }
+
+  if (heal >= ranged) {
+    if (autoRangedHeal(creep, healables) === OK) return
+  }
+
+  if (autoRangedAttack(creep, attackables) === OK) {
+    autoMeleeAttack(creep, attackables)
+  }
+
+  if (autoRangedHeal(creep, healables) === OK) return
+  if (autoMeleeAttack(creep, attackables) === OK) return
+
+  console.log(`Unexpected creep state ${creep}`)
 }
 
 function autoCombat () {
