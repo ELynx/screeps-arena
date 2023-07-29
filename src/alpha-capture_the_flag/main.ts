@@ -8,7 +8,7 @@ import { searchPath } from 'game/path-finder'
 import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
 // custom demands to navigation
-type MoreFindPathOptions = FindPathOptions & { backwards?: boolean, costByPath?: boolean }
+type MoreFindPathOptions = FindPathOptions
 
 // assumption, no constant given
 const MAP_SIDE_SIZE : number = 100
@@ -495,12 +495,10 @@ class CreepLine {
   }
 
   protected locoToWagonIndex (magicNumber: number, options?: MoreFindPathOptions) : number {
-    if (options && options.backwards === true) return this.wagonToLocoIndex(magicNumber)
     return magicNumber
   }
 
   protected wagonToLocoIndex (magicNumber: number, options?: MoreFindPathOptions) : number {
-    if (options && options.backwards === true) return this.locoToWagonIndex(magicNumber)
     return this.creeps.length - 1 - magicNumber
   }
 
@@ -509,13 +507,7 @@ class CreepLine {
       const ri = this.locoToWagonIndex(i, options)
       const loco = this.creeps[ri]
       if (operational(loco)) {
-        if (options && options.costByPath) {
-          const path = searchPath(loco as Position, target, options)
-          if (path.incomplete) return Number.MAX_SAFE_INTEGER
-          return path.cost / (options.plainCost || 2)
-        } else {
-          return get8WayGridRange(loco as Position, target)
-        }
+        return get8WayGridRange(loco as Position, target)
       }
     }
 
@@ -677,14 +669,7 @@ class CreepPositionGoal implements Goal {
 
   cost (options?: MoreFindPathOptions): number {
     if (!operational(this.creep)) return Number.MAX_SAFE_INTEGER
-
-    if (options && options.costByPath) {
-      const path = searchPath(this.creep as Position, this.position, options)
-      if (path.incomplete) return Number.MAX_SAFE_INTEGER
-      return path.cost / (options.plainCost || 2)
-    } else {
-      return get8WayGridRange(this.creep as Position, this.position)
-    }
+    return get8WayGridRange(this.creep as Position, this.position)
   }
 }
 
