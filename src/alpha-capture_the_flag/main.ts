@@ -116,7 +116,7 @@ function hasActiveBodyPart (creep: Creep, type: string) : boolean {
 }
 
 function countActiveBodyParts (creep: Creep) : Map<string, number> {
-  const result = new Map<string, number>()
+  const result : Map<string, number> = new Map()
   for (const bodyPart of creep.body) {
     if (bodyPart.hits > 0) {
       const now = result[bodyPart.type] || 0
