@@ -426,6 +426,16 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
     meleeThenHeal()
     return
   }
+
+  if (autoSelfHeal(creep) === OK) {
+    autoRangedAttack(creep, attackables)
+    return
+  }
+
+  if (autoMeleeHeal(creep, healables) === OK) {
+    autoRangedAttack(creep, attackables)
+    return
+  }
 }
 
 function autoCombat () {
