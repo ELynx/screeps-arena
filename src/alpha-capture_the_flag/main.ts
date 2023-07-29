@@ -1,7 +1,7 @@
 import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
 
 import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
-import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE } from 'game/constants'
+import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { searchPath } from 'game/path-finder'
@@ -108,26 +108,24 @@ function operational (something?: Structure | Creep) : boolean {
   return true
 }
 
-function _bodyPartIs (bodyPart: BodyPartType, type: string) : boolean {
-  return bodyPart.hits > 0 && bodyPart.type === type
-}
-
 function hasActiveBodyPart (creep: Creep, type: string) : boolean {
   return creep.body.some(
     function (bodyPart: BodyPartType) : boolean {
-      return _bodyPartIs(bodyPart, type)
+      return bodyPart.hits > 0 && bodyPart.type === type
     }
   )
 }
 
-function countActiveBodyParts (creep: Creep, type: string) : number {
-  if (!operational(creep)) return 0
-
-  return creep.body.filter(
-    function (bodyPart: BodyPartType) : boolean {
-      return _bodyPartIs(bodyPart, type)
+function countActiveBodyParts (creep: Creep) : Map<string, number> {
+  let result = new Map<string, number>
+  for (const bodyPart of creep.body) {
+    if (bodyPart.hits > 0) {
+      let now = result[bodyPart.type] || 0
+      result[bodyPart.type] = now + 1
     }
-  ).length
+  }
+
+  return result
 }
 
 function notMaxHits (creep: Creep) : boolean {
@@ -346,6 +344,38 @@ function autoRangedHeal (creep: Creep, healables: Creep[]) : CreepRangedHealResu
 
 function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   // https://docs.screeps.com/simultaneous-actions.html
+  const counts = countActiveBodyParts(creep)
+
+  const tough : number = counts[TOUGH] || 0
+  const melee : number = counts[ATTACK] || 0
+  const ranged : number = counts[RANGED_ATTACK] || 0
+  const heal : number = counts[HEAL] || 0
+
+  // solve simple cases
+
+  if (melee + ranged + heal === 0) return
+
+  if (melee > 0 && ranged === 0 && heal === 0) {
+    autoMeleeAttack(creep, attackables)
+    return
+  }
+
+  if (melee === 0 && ranged > 0 && heal === 0) {
+    autoRangedAttack(creep, attackables)
+    return
+  }
+
+  if (melee === 0 && ranged === 0 && heal > 0) {
+    if (notMaxHits(creep)) autoSelfHeal(creep)
+    else if (autoMeleeHeal(creep, healables) !== OK) autoRangedHeal(creep, healables) 
+    return
+  }
+
+  // solve medium cases
+
+  if (melee === 0) {
+    
+  }
 }
 
 function autoCombat () {
