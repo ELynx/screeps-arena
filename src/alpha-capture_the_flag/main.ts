@@ -574,13 +574,6 @@ class CreepLine {
   }
 }
 
-function operationalCreepLine (creepLine: CreepLine) : boolean {
-  for (const creep of creepLine.creeps) {
-    if (operational(creep)) return true
-  }
-  return false
-}
-
 class Rotator {
   protected anchor: Position
   protected offset: Position
@@ -864,19 +857,13 @@ class LinePositionGoalWithAutoReverse extends LinePositionGoal {
 
 class BodyPartGoal implements Goal {
   creeps: Creep[]
-  creepLines: CreepLine[]
 
   constructor () {
     this.creeps = []
-    this.creepLines = []
   }
 
   addCreep (creep: Creep) {
     this.creeps.push(creep)
-  }
-
-  addCreepLine (creepLine: CreepLine) {
-    this.creepLines.push(creepLine)
   }
 
   advance (options?: MoreFindPathOptions): CreepMoveResult {
@@ -884,26 +871,14 @@ class BodyPartGoal implements Goal {
     if (allBodyPards.length === 0) return OK
 
     this.creeps = this.creeps.filter(operational)
-    this.creepLines = this.creepLines.filter(operationalCreepLine)
 
-    if (this.creeps.length === 0 && this.creepLines.length === 0) return ERR_NO_BODYPART
+    if (this.creeps.length === 0) return ERR_NO_BODYPART
 
     const actorPoints : CostPoint[] = []
 
     // only operational left
     for (const creep of this.creeps) {
       actorPoints.push([creep.x, creep.y])
-    }
-
-    // only operational left, meaning there is an operational creep inside
-    for (const creepLine of this.creepLines) {
-      for (const creep of creepLine.creeps) {
-        if (operational(creep)) {
-          // approximation
-          actorPoints.push([creep.x, creep.y])
-          break // to next creepLine
-        }
-      }
     }
 
     const bodyParts = allBodyPards.filter(
@@ -944,17 +919,10 @@ class BodyPartGoal implements Goal {
       const targetPoint = targetPoints[targetIndex]
       const target = { x: targetPoint[0], y: targetPoint[1] } as Position
 
-      if (actorIndex < this.creeps.length) {
-        const creep = this.creeps[actorIndex]
-        const goal = new CreepPositionGoal(creep, target)
-        const rc = goal.advance(options)
-        if (rc < totalRc) totalRc = rc
-      } else {
-        const creepLine = this.creepLines[actorIndex - this.creeps.length]
-        const goal = LinePositionGoalWithAutoReverse.ofCreepLine(creepLine, target)
-        const rc = goal.advance(options)
-        if (rc < totalRc) totalRc = rc
-      }
+      const creep = this.creeps[actorIndex]
+      const goal = new CreepPositionGoal(creep, target)
+      const rc = goal.advance(options)
+      if (rc < totalRc) totalRc = rc
     }
 
     return totalRc
@@ -1301,7 +1269,7 @@ function plan () : void {
     .autoRotate()
     .build()
 
-  const powerUp1 = new BodyPartGoal()
+  const powerUpAll = new BodyPartGoal()
   for (const defenceGoal of defenceGoals) {
     const rushGoal = new CreepPositionGoal(defenceGoal.creep, enemyFlag as Position)
 
@@ -1309,9 +1277,9 @@ function plan () : void {
     rushRandom.push(rushGoal)
     defenceOrRushRandom.push(new OrGoal([defenceGoal, rushGoal]))
 
-    powerUp1.addCreep(defenceGoal.creep)
+    powerUpAll.addCreep(defenceGoal.creep)
   }
-  powerUp.push(powerUp1)
+  powerUp.push(powerUpAll)
 
   const line1 : CreepPositionGoal[] = [defenceGoals[0], defenceGoals[10], defenceGoals[2]]
   const line2 : CreepPositionGoal[] = [defenceGoals[4], defenceGoals[12]]
@@ -1320,7 +1288,7 @@ function plan () : void {
   const line5 : CreepPositionGoal[] = [defenceGoals[5], defenceGoals[9], defenceGoals[7]]
   const lines : CreepPositionGoal[][] = [line1, line2, line3, line4, line5]
 
-  const powerUp2 = new BodyPartGoal()
+  const powerUpActive = new BodyPartGoal()
   for (const line of lines) {
     const doDefence = new AndGoal(line)
     const doOffence = LinePositionGoal.of(line.map(
@@ -1331,9 +1299,12 @@ function plan () : void {
 
     rushOrganised.push(doOffence)
     defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]))
-    powerUp2.addCreepLine(doOffence.creepLine)
+    
+    for (const goal of line) {
+      powerUpActive.addCreep(goal.creep)
+    }
   }
-  prepare.push(powerUp2)
+  prepare.push(powerUpActive)
 
   // don't forget intentional doorstep
   rushOrganised.push(defenceGoals[13])
