@@ -1,12 +1,11 @@
 import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
 
-import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
+import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower, CreepRangedMassAttackResult } from 'game/prototypes'
 import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { searchPath } from 'game/path-finder'
 import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
-import { CreepRangedMassAttackResult } from 'game/prototypes'
 
 // custom demands to navigation
 type MoreFindPathOptions = FindPathOptions & { backwards?: boolean, costByPath?: boolean }
@@ -117,10 +116,10 @@ function hasActiveBodyPart (creep: Creep, type: string) : boolean {
 }
 
 function countActiveBodyParts (creep: Creep) : Map<string, number> {
-  let result = new Map<string, number>
+  const result = new Map<string, number>()
   for (const bodyPart of creep.body) {
     if (bodyPart.hits > 0) {
-      let now = result[bodyPart.type] || 0
+      const now = result[bodyPart.type] || 0
       result[bodyPart.type] = now + 1
     }
   }
@@ -368,7 +367,7 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   if (melee === 0 && ranged === 0 && heal > 0) {
     if (autoSelfHeal(creep) === OK) return
     if (autoMeleeHeal(creep, healables) === OK) return
-    autoRangedHeal(creep, healables) 
+    autoRangedHeal(creep, healables)
     return
   }
 
@@ -392,8 +391,8 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
     }
 
     if (ranged > heal) {
-     if (autoRangedAttack(creep, attackables) === OK) return
-     autoRangedHeal(creep, healables)
+      if (autoRangedAttack(creep, attackables) === OK) return
+      autoRangedHeal(creep, healables)
     } else {
       if (autoRangedHeal(creep, healables) === OK) return
       autoRangedAttack(creep, attackables)
@@ -414,7 +413,6 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
     }
 
     asHealAsPossible()
-    return
   }
 
   if (tough > 0) {
