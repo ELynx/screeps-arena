@@ -375,7 +375,6 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   // solve medium cases
 
   if (heal === 0) {
-    // not block each other
     autoMeleeAttack(creep, attackables)
     autoRangedAttack(creep, attackables)
     return
