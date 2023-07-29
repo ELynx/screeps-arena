@@ -119,8 +119,8 @@ function countActiveBodyParts (creep: Creep) : Map<string, number> {
   const result : Map<string, number> = new Map()
   for (const bodyPart of creep.body) {
     if (bodyPart.hits > 0) {
-      const now = result[bodyPart.type] || 0
-      result[bodyPart.type] = now + 1
+      const now = result.get(bodyPart.type) || 0
+      result.set(bodyPart.type, now + 1)
     }
   }
 
