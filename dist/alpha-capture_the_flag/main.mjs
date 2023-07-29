@@ -1,6 +1,6 @@
 import assignToGrids from './node_modules/grid-assign-js/dist/lap-jv/index.mjs';
 import { StructureTower, Creep } from '/game/prototypes';
-import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, ERR_TIRED, ERR_INVALID_ARGS, TOWER_RANGE, RANGED_ATTACK_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
+import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, TOUGH, ERR_TIRED, ERR_INVALID_ARGS, TOWER_RANGE, ERR_NOT_IN_RANGE, RANGED_ATTACK_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
 import { getTicks, getCpuTime, getObjectsByPrototype, getRange, getDirection } from '/game/utils';
 import { Visual } from '/game/visual';
 import { searchPath } from '/game/path-finder';
@@ -12,7 +12,7 @@ const TICK_LIMIT = 2000;
 // derived constants
 const MAP_SIDE_SIZE_SQRT = Math.round(Math.sqrt(MAP_SIDE_SIZE));
 /**
- * Returns number of steps on 8-direction grid from a to b
+ * Returns buggy but useful distance metric
  * @param a 1st position
  * @param b 2nd position
  */
@@ -92,6 +92,16 @@ function hasActiveBodyPart(creep, type) {
     return creep.body.some(function (bodyPart) {
         return bodyPart.hits > 0 && bodyPart.type === type;
     });
+}
+function countActiveBodyParts(creep) {
+    const result = new Map();
+    for (const bodyPart of creep.body) {
+        if (bodyPart.hits > 0) {
+            const now = result.get(bodyPart.type) || 0;
+            result.set(bodyPart.type, now + 1);
+        }
+    }
+    return result;
 }
 function notMaxHits(creep) {
     return creep.hits < creep.hitsMax;
@@ -193,73 +203,159 @@ class AttackableAndRange {
         this.range = getRange(creep, attackable);
     }
 }
-function autoMelee(creep, attackables) {
-    if (!hasActiveBodyPart(creep, ATTACK))
-        return;
+function autoMeleeAttack(creep, attackables) {
     const inRange = attackables.map(function (target) {
         return new AttackableAndRange(creep, target);
     }).filter(function (target) {
         return target.range <= 1;
     });
     if (inRange.length === 0)
-        return;
+        return ERR_NOT_IN_RANGE;
     const target = inRange[0].attackable;
-    creep.attack(target);
     new Visual().line(creep, target, { color: '#f93842' });
+    return creep.attack(target);
 }
 function rangedMassAttackPower(target) {
     return RANGED_ATTACK_POWER * (RANGED_ATTACK_DISTANCE_RATE[target.range] || 0);
 }
-function autoRanged(creep, attackables) {
-    if (!hasActiveBodyPart(creep, RANGED_ATTACK))
-        return;
+function autoRangedAttack(creep, attackables) {
     const inRange = attackables.map(function (target) {
         return new AttackableAndRange(creep, target);
     }).filter(function (target) {
         return target.range <= 3;
     });
     if (inRange.length === 0)
-        return;
+        return ERR_NOT_IN_RANGE;
     const totalMassAttackPower = inRange.map(rangedMassAttackPower).reduce((sum, current) => sum + current, 0);
     if (totalMassAttackPower >= RANGED_ATTACK_POWER) {
-        creep.rangedMassAttack();
+        return creep.rangedMassAttack();
     }
     else {
         const target = inRange[0].attackable;
-        creep.rangedAttack(target);
+        return creep.rangedAttack(target);
     }
 }
-function autoHeal(creep, healables) {
-    if (!hasActiveBodyPart(creep, HEAL))
-        return;
-    if (notMaxHits(creep)) {
-        creep.heal(creep);
-        return;
-    }
+function autoSelfHeal(creep) {
+    if (notMaxHits(creep))
+        return creep.heal(creep);
+    return ERR_NOT_IN_RANGE;
+}
+function autoMeleeHeal(creep, healables) {
     const inRange = healables.map(function (target) {
         return new AttackableAndRange(creep, target);
     }).filter(function (target) {
-        return target.range <= 3;
+        // voluntary, self heal handled elsewhere
+        return target.range <= 1 && target.attackable.id !== creep.id;
     });
     if (inRange.length === 0)
-        return;
-    const inTouch = inRange.find(function (target) {
-        return target.range <= 1;
+        return ERR_NOT_IN_RANGE;
+    const target = inRange[0].attackable;
+    new Visual().line(creep, target, { color: '#65fd62' });
+    return creep.heal(target);
+}
+function autoRangedHeal(creep, healables) {
+    const inRange = healables.map(function (target) {
+        return new AttackableAndRange(creep, target);
+    }).filter(function (target) {
+        // mandatory, ranged does not work on self
+        return target.range <= 3 && target.attackable.id !== creep.id;
     });
-    if (inTouch !== undefined) {
-        const target = inTouch.attackable;
-        creep.heal(target);
-        new Visual().line(creep, target, { color: '#65fd62' });
-    }
-    else {
-        const target = inRange[0].attackable;
-        creep.rangedHeal(target);
-    }
+    if (inRange.length === 0)
+        return ERR_NOT_IN_RANGE;
+    const target = inRange[0].attackable;
+    return creep.rangedHeal(target);
 }
 function autoAll(creep, attackables, healables) {
-    autoMelee(creep, attackables);
-    autoRanged(creep, attackables);
-    autoHeal(creep, healables);
+    // https://docs.screeps.com/simultaneous-actions.html
+    const counts = countActiveBodyParts(creep);
+    const tough = counts.get(TOUGH) || 0;
+    const melee = counts.get(ATTACK) || 0;
+    const ranged = counts.get(RANGED_ATTACK) || 0;
+    const heal = counts.get(HEAL) || 0;
+    // solve simple cases
+    if (melee === 0 && ranged === 0 && heal === 0)
+        return;
+    if (melee > 0 && ranged === 0 && heal === 0) {
+        autoMeleeAttack(creep, attackables);
+        return;
+    }
+    if (melee === 0 && ranged > 0 && heal === 0) {
+        autoRangedAttack(creep, attackables);
+        return;
+    }
+    if (melee === 0 && ranged === 0 && heal > 0) {
+        if (autoSelfHeal(creep) === OK)
+            return;
+        if (autoMeleeHeal(creep, healables) === OK)
+            return;
+        autoRangedHeal(creep, healables);
+        return;
+    }
+    if (heal === 0) {
+        autoMeleeAttack(creep, attackables);
+        autoRangedAttack(creep, attackables);
+        return;
+    }
+    // solve medium cases
+    const asHealAsPossible = function () {
+        if (autoSelfHeal(creep) === OK) {
+            autoRangedAttack(creep, attackables);
+            return;
+        }
+        if (autoMeleeHeal(creep, healables) === OK) {
+            autoRangedAttack(creep, attackables);
+            return;
+        }
+        if (ranged > heal) {
+            if (autoRangedAttack(creep, attackables) === OK)
+                return;
+            autoRangedHeal(creep, healables);
+        }
+        else {
+            if (autoRangedHeal(creep, healables) === OK)
+                return;
+            autoRangedAttack(creep, attackables);
+        }
+    };
+    if (melee === 0) {
+        asHealAsPossible();
+        return;
+    }
+    // solve complex cases
+    const meleeThenHeal = function () {
+        if (autoMeleeAttack(creep, attackables) === OK) {
+            autoRangedAttack(creep, attackables);
+            return;
+        }
+        asHealAsPossible();
+    };
+    if (tough > 0) {
+        meleeThenHeal();
+        return;
+    }
+    if (melee > heal) {
+        meleeThenHeal();
+        return;
+    }
+    if (autoSelfHeal(creep) === OK) {
+        autoRangedAttack(creep, attackables);
+        return;
+    }
+    if (autoMeleeHeal(creep, healables) === OK) {
+        autoRangedAttack(creep, attackables);
+        return;
+    }
+    if (heal >= ranged) {
+        if (autoRangedHeal(creep, healables) === OK)
+            return;
+    }
+    if (autoRangedAttack(creep, attackables) === OK) {
+        autoMeleeAttack(creep, attackables);
+    }
+    if (autoRangedHeal(creep, healables) === OK)
+        return;
+
+    autoMeleeAttack(creep, attackables) === OK
 }
 function autoCombat() {
     myPlayerInfo.towers.filter(operational).forEach(operateTower);

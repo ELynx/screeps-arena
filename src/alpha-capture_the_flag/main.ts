@@ -1,7 +1,7 @@
 import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
 
-import { Creep, CreepMoveResult, GameObject, OwnedStructure, Position, Structure, StructureTower } from 'game/prototypes'
-import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS } from 'game/constants'
+import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower, CreepRangedMassAttackResult } from 'game/prototypes'
+import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { searchPath } from 'game/path-finder'
@@ -109,10 +109,22 @@ function operational (something?: Structure | Creep) : boolean {
 
 function hasActiveBodyPart (creep: Creep, type: string) : boolean {
   return creep.body.some(
-    function (bodyPart) : boolean {
+    function (bodyPart: BodyPartType) : boolean {
       return bodyPart.hits > 0 && bodyPart.type === type
     }
   )
+}
+
+function countActiveBodyParts (creep: Creep) : Map<string, number> {
+  const result : Map<string, number> = new Map()
+  for (const bodyPart of creep.body) {
+    if (bodyPart.hits > 0) {
+      const now = result.get(bodyPart.type) || 0
+      result.set(bodyPart.type, now + 1)
+    }
+  }
+
+  return result
 }
 
 function notMaxHits (creep: Creep) : boolean {
@@ -242,9 +254,7 @@ class AttackableAndRange {
   }
 }
 
-function autoMelee (creep: Creep, attackables: Attackable[]) {
-  if (!hasActiveBodyPart(creep, ATTACK)) return
-
+function autoMeleeAttack (creep: Creep, attackables: Attackable[]) : CreepAttackResult {
   const inRange = attackables.map(
     function (target: Attackable) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
@@ -255,20 +265,18 @@ function autoMelee (creep: Creep, attackables: Attackable[]) {
     }
   )
 
-  if (inRange.length === 0) return
+  if (inRange.length === 0) return ERR_NOT_IN_RANGE
 
   const target = inRange[0].attackable
-  creep.attack(target)
   new Visual().line(creep as Position, target as Position, { color: '#f93842' as Color } as LineVisualStyle)
+  return creep.attack(target)
 }
 
 function rangedMassAttackPower (target: AttackableAndRange) : number {
   return RANGED_ATTACK_POWER * (RANGED_ATTACK_DISTANCE_RATE[target.range] || 0)
 }
 
-function autoRanged (creep: Creep, attackables: Attackable[]) {
-  if (!hasActiveBodyPart(creep, RANGED_ATTACK)) return
-
+function autoRangedAttack (creep: Creep, attackables: Attackable[]) : CreepRangedAttackResult | CreepRangedMassAttackResult {
   const inRange = attackables.map(
     function (target: Attackable) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
@@ -279,58 +287,165 @@ function autoRanged (creep: Creep, attackables: Attackable[]) {
     }
   )
 
-  if (inRange.length === 0) return
+  if (inRange.length === 0) return ERR_NOT_IN_RANGE
 
   const totalMassAttackPower = inRange.map(rangedMassAttackPower).reduce((sum, current) => sum + current, 0)
 
   if (totalMassAttackPower >= RANGED_ATTACK_POWER) {
-    creep.rangedMassAttack()
+    return creep.rangedMassAttack()
   } else {
     const target = inRange[0].attackable
-    creep.rangedAttack(target)
+    return creep.rangedAttack(target)
   }
 }
 
-function autoHeal (creep: Creep, healables: Creep[]) {
-  if (!hasActiveBodyPart(creep, HEAL)) return
+function autoSelfHeal (creep: Creep) : CreepHealResult {
+  if (notMaxHits(creep)) return creep.heal(creep)
+  return ERR_NOT_IN_RANGE
+}
 
-  if (notMaxHits(creep)) {
-    creep.heal(creep)
-    return
-  }
-
+function autoMeleeHeal (creep: Creep, healables: Creep[]) : CreepHealResult {
   const inRange = healables.map(
     function (target: Creep) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
   ).filter(
     function (target: AttackableAndRange) : boolean {
-      return target.range <= 3
+      // voluntary, self heal handled elsewhere
+      return target.range <= 1 && target.attackable.id !== creep.id
     }
   )
 
-  if (inRange.length === 0) return
+  if (inRange.length === 0) return ERR_NOT_IN_RANGE
 
-  const inTouch = inRange.find(
+  const target = inRange[0].attackable as Creep
+  new Visual().line(creep as Position, target as Position, { color: '#65fd62' as Color } as LineVisualStyle)
+  return creep.heal(target)
+}
+
+function autoRangedHeal (creep: Creep, healables: Creep[]) : CreepRangedHealResult {
+  const inRange = healables.map(
+    function (target: Creep) : AttackableAndRange {
+      return new AttackableAndRange(creep, target)
+    }
+  ).filter(
     function (target: AttackableAndRange) : boolean {
-      return target.range <= 1
+      // mandatory, ranged does not work on self
+      return target.range <= 3 && target.attackable.id !== creep.id
     }
   )
 
-  if (inTouch !== undefined) {
-    const target = inTouch.attackable as Creep
-    creep.heal(target)
-    new Visual().line(creep as Position, target as Position, { color: '#65fd62' as Color } as LineVisualStyle)
-  } else {
-    const target = inRange[0].attackable as Creep
-    creep.rangedHeal(target)
-  }
+  if (inRange.length === 0) return ERR_NOT_IN_RANGE
+
+  const target = inRange[0].attackable as Creep
+  return creep.rangedHeal(target)
 }
 
 function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
-  autoMelee(creep, attackables)
-  autoRanged(creep, attackables)
-  autoHeal(creep, healables)
+  // https://docs.screeps.com/simultaneous-actions.html
+  const counts = countActiveBodyParts(creep)
+
+  const tough : number = counts.get(TOUGH) || 0
+  const melee : number = counts.get(ATTACK) || 0
+  const ranged : number = counts.get(RANGED_ATTACK) || 0
+  const heal : number = counts.get(HEAL) || 0
+
+  // solve simple cases
+
+  if (melee === 0 && ranged === 0 && heal === 0) return
+
+  if (melee > 0 && ranged === 0 && heal === 0) {
+    autoMeleeAttack(creep, attackables)
+    return
+  }
+
+  if (melee === 0 && ranged > 0 && heal === 0) {
+    autoRangedAttack(creep, attackables)
+    return
+  }
+
+  if (melee === 0 && ranged === 0 && heal > 0) {
+    if (autoSelfHeal(creep) === OK) return
+    if (autoMeleeHeal(creep, healables) === OK) return
+    autoRangedHeal(creep, healables)
+    return
+  }
+
+  if (heal === 0) {
+    autoMeleeAttack(creep, attackables)
+    autoRangedAttack(creep, attackables)
+    return
+  }
+
+  // solve medium cases
+
+  const asHealAsPossible = function () : void {
+    if (autoSelfHeal(creep) === OK) {
+      autoRangedAttack(creep, attackables)
+      return
+    }
+
+    if (autoMeleeHeal(creep, healables) === OK) {
+      autoRangedAttack(creep, attackables)
+      return
+    }
+
+    if (ranged > heal) {
+      if (autoRangedAttack(creep, attackables) === OK) return
+      autoRangedHeal(creep, healables)
+    } else {
+      if (autoRangedHeal(creep, healables) === OK) return
+      autoRangedAttack(creep, attackables)
+    }
+  }
+
+  if (melee === 0) {
+    asHealAsPossible()
+    return
+  }
+
+  // solve complex cases
+
+  const meleeThenHeal = function () : void {
+    if (autoMeleeAttack(creep, attackables) === OK) {
+      autoRangedAttack(creep, attackables)
+      return
+    }
+
+    asHealAsPossible()
+  }
+
+  if (tough > 0) {
+    meleeThenHeal()
+    return
+  }
+
+  if (melee > heal) {
+    meleeThenHeal()
+    return
+  }
+
+  if (autoSelfHeal(creep) === OK) {
+    autoRangedAttack(creep, attackables)
+    return
+  }
+
+  if (autoMeleeHeal(creep, healables) === OK) {
+    autoRangedAttack(creep, attackables)
+    return
+  }
+
+  if (heal >= ranged) {
+    if (autoRangedHeal(creep, healables) === OK) return
+  }
+
+  if (autoRangedAttack(creep, attackables) === OK) {
+    autoMeleeAttack(creep, attackables)
+  }
+
+  if (autoRangedHeal(creep, healables) === OK) return
+
+  autoMeleeAttack(creep, attackables)
 }
 
 function autoCombat () {
