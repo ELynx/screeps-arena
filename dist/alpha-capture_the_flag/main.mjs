@@ -354,9 +354,8 @@ function autoAll(creep, attackables, healables) {
     }
     if (autoRangedHeal(creep, healables) === OK)
         return;
-    if (autoMeleeAttack(creep, attackables) === OK)
-        return;
-    console.log(`Unexpected creep state ${creep}`);
+
+    autoMeleeAttack(creep, attackables) === OK
 }
 function autoCombat() {
     myPlayerInfo.towers.filter(operational).forEach(operateTower);
