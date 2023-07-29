@@ -345,10 +345,10 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   // https://docs.screeps.com/simultaneous-actions.html
   const counts = countActiveBodyParts(creep)
 
-  const tough : number = counts[TOUGH] || 0
-  const melee : number = counts[ATTACK] || 0
-  const ranged : number = counts[RANGED_ATTACK] || 0
-  const heal : number = counts[HEAL] || 0
+  const tough : number = counts.get(TOUGH) || 0
+  const melee : number = counts.get(ATTACK) || 0
+  const ranged : number = counts.get(RANGED_ATTACK) || 0
+  const heal : number = counts.get(HEAL) || 0
 
   // solve simple cases
 
