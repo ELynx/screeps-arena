@@ -405,7 +405,19 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
     return
   }
 
+  // solve complex cases
+
   if (tough > 0) {
+    if (autoMeleeAttack(creep, attackables) === OK) {
+      autoRangedAttack(creep, attackables)
+      return
+    }
+
+    asHealAsPossible(creep)
+    return
+  }
+
+  if (melee > heal) {
     if (autoMeleeAttack(creep, attackables) === OK) {
       autoRangedAttack(creep, attackables)
       return
