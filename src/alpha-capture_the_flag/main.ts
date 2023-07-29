@@ -401,6 +401,34 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
     }
     return
   }
+
+  // solve complex
+
+  if (tough > 0) {
+    if (autoMeleeAttack(creep, attackables) === OK) {
+      autoRangedAttack(creep, attackables)
+      return
+    }
+
+    if (autoSelfHeal(creep) === OK) {
+      autoRangedAttack(creep, attackables)
+      return
+    }
+
+    if (autoMeleeHeal(creep, healables) === OK) {
+      autoRangedAttack(creep, attackables)
+      return
+    }
+
+    if (ranged > heal) {
+      if (autoRangedAttack(creep, attackables) === OK) return
+      autoRangedHeal(creep, healables)
+     } else {
+       if (autoRangedHeal(creep, healables) === OK) return
+       autoRangedAttack(creep, attackables)
+     }
+     return
+  }
 }
 
 function autoCombat () {
