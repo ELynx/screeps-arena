@@ -366,8 +366,9 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   }
 
   if (melee === 0 && ranged === 0 && heal > 0) {
-    if (notMaxHits(creep)) autoSelfHeal(creep)
-    else if (autoMeleeHeal(creep, healables) !== OK) autoRangedHeal(creep, healables) 
+    if (autoSelfHeal(creep) === OK) return
+    if (autoMeleeHeal(creep, healables) === OK) return
+    autoRangedHeal(creep, healables) 
     return
   }
 
@@ -381,21 +382,23 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   }
 
   if (melee === 0) {
-    // prio 1 - fix self
-    if (notMaxHits(creep)) {
+    if (autoSelfHeal(creep) === OK) {
       autoRangedAttack(creep, attackables)
-      autoSelfHeal(creep)
       return
     }
 
-    // prio 2 - shoot and still heal melee
-    if (autoRangedAttack(creep, attackables) === OK) {
-      autoMeleeHeal(creep, healables)
+    if (autoMeleeHeal(creep, healables) === OK) {
+      autoRangedAttack(creep, attackables)
       return
     }
 
-    if (autoMeleeHeal(creep, healables) !== OK) autoRangedHeal(creep, healables)
-
+    if (ranged > heal) {
+     if (autoRangedAttack(creep, attackables) === OK) return
+     autoRangedHeal(creep, healables)
+    } else {
+      if (autoRangedHeal(creep, healables) === OK) return
+      autoRangedAttack(creep, attackables)
+    }
     return
   }
 }
