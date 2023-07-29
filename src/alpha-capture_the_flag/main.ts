@@ -346,6 +346,15 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   const ranged = countActiveBodyParts(creep, RANGED_ATTACK)
   const heal = countActiveBodyParts(creep, HEAL)
 
+  let didMelee = false
+  let didRanged = false
+  let didHeal = false
+  let didRangedHeal = false
+
+  if (melee > 0 && melee > heal) {
+    
+  }
+
   autoMelee(creep, attackables)
   autoRanged(creep, attackables)
   autoHeal(creep, healables)
