@@ -353,7 +353,7 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
 
   // solve simple cases
 
-  if (melee + ranged + heal === 0) return
+  if (melee === 0 && ranged === 0 && heal === 0) return
 
   if (melee > 0 && ranged === 0 && heal === 0) {
     autoMeleeAttack(creep, attackables)
@@ -372,22 +372,15 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
     return
   }
 
-  // solve medium cases
-
   if (heal === 0) {
     autoMeleeAttack(creep, attackables)
     autoRangedAttack(creep, attackables)
     return
   }
 
-  if (tough > 0 || melee === 0) {
-    if (tough > 0 && melee > 0) {
-      if (autoMeleeAttack(creep, attackables) === OK) {
-        autoRangedAttack(creep, attackables)
-        return
-      }
-    }
+  // solve medium cases
 
+  const asHealAsPossible = function (creep: Creep) : void {
     if (autoSelfHeal(creep) === OK) {
       autoRangedAttack(creep, attackables)
       return
@@ -405,6 +398,20 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
       if (autoRangedHeal(creep, healables) === OK) return
       autoRangedAttack(creep, attackables)
     }
+  }
+
+  if (melee === 0) {
+    asHealAsPossible(creep)
+    return
+  }
+
+  if (tough > 0) {
+    if (autoMeleeAttack(creep, attackables) === OK) {
+      autoRangedAttack(creep, attackables)
+      return
+    }
+
+    asHealAsPossible(creep)
     return
   }
 }
