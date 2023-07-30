@@ -1,7 +1,7 @@
 import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
 
 import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower, CreepRangedMassAttackResult } from 'game/prototypes'
-import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH, BODYPART_COST, BODYPART_HITS } from 'game/constants'
+import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH, BODYPART_COST, BODYPART_HITS, TOWER_POWER_ATTACK, TOWER_POWER_HEAL, ATTACK_POWER, HEAL_POWER, RANGED_HEAL_POWER } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
@@ -53,6 +53,11 @@ function allCreeps () : Creep[] {
   return _creepCache
 }
 
+const _hitsCache : Map<string, number> = new Map()
+function clearHitsCache() : void {
+  _hitsCache.clear()
+}
+
 class PlayerInfo {
   towers: StructureTower[] = []
   creeps: Creep[] = []
@@ -86,6 +91,8 @@ function collectPlayerInfo () : void {
 }
 
 export function loop () : void {
+  clearHitsCache()
+
   if (getTicks() === 1) {
     collectPlayerInfo()
     plan()
@@ -126,8 +133,24 @@ function countActiveBodyParts (creep: Creep) : Map<string, number> {
   return result
 }
 
+function registerHeal (creep: Creep, power: number) : void {
+  const now = _hitsCache.get(creep.id.toLocaleString()) || 0
+  _hitsCache.set(creep.id.toLocaleString(), now + power)
+}
+
+function registerDamage (attackable: Attackable, power: number) {
+  const now = _hitsCache.get(attackable.id.toLocaleString()) || 0
+  _hitsCache.set(attackable.id.toLocaleString(), now - power)
+}
+
 function notMaxHits (creep: Creep) : boolean {
-  return creep.hits < creep.hitsMax
+  const registered = _hitsCache.get(creep.id.toLocaleString()) || 0
+  return (creep.hits + registered) < creep.hitsMax
+}
+
+function notZeroHits (attackable: Attackable) : boolean {
+  const registered = _hitsCache.get(attackable.id.toLocaleString()) || 0
+  return (attackable.hits + registered) > -HEAL_POWER // TODO adjust for actual healing
 }
 
 function atSamePosition (a: Position, b: Position) : boolean {
@@ -178,18 +201,25 @@ class StructureTowerScore {
   creep: Creep
   range: number
   score: number
+  power: number
 
   constructor (creep: Creep, range: number) {
     this.creep = creep
     this.range = range
     this.score = this.calculateScore()
+    this.power = this.calculatePower()
   }
 
   private calculateScore () : number {
     if (this.range > TOWER_RANGE) return 0
     const scoreAtOptimal = this.creep.my ? creepHurtCost(this.creep) : creepActiveCost(this.creep)
-    const withFalloff = towerPower(scoreAtOptimal, this.range)
-    return Math.round(withFalloff)
+    return towerPower(scoreAtOptimal, this.range)
+  }
+
+  private calculatePower () : number {
+    if (this.range > TOWER_RANGE) return 0
+    const powerAtOptimal = this.creep.my ? TOWER_POWER_HEAL : TOWER_POWER_ATTACK
+    return towerPower(powerAtOptimal, this.range)
   }
 }
 
@@ -201,8 +231,7 @@ function operateTower (tower: StructureTower) : void {
     .filter(operational)
     .filter(
       function (creep: Creep) : boolean {
-        if (creep.my) return notMaxHits(creep)
-        return true
+        return creep.my ? notMaxHits(creep) : notZeroHits(creep)
       }
     )
     .map(
@@ -228,11 +257,14 @@ function operateTower (tower: StructureTower) : void {
 
   if (allCreepsInRange.length === 0) return
 
+  const power = allCreepsInRange[0].power
   const target = allCreepsInRange[0].creep
-
+  
   if (target.my) {
+    registerHeal(target, power)
     tower.heal(target)
   } else {
+    registerDamage(target, power)
     tower.attack(target)
   }
 }
@@ -250,7 +282,7 @@ class AttackableAndRange {
 }
 
 function autoMeleeAttack (creep: Creep, attackables: Attackable[]) : CreepAttackResult {
-  const inRange = attackables.map(
+  const inRange = attackables.filter(notZeroHits).map(
     function (target: Attackable) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
@@ -264,6 +296,7 @@ function autoMeleeAttack (creep: Creep, attackables: Attackable[]) : CreepAttack
 
   const target = inRange[0].attackable
   new Visual().line(creep as Position, target as Position, { color: '#f93842' as Color } as LineVisualStyle)
+  registerDamage(target, ATTACK_POWER)
   return creep.attack(target)
 }
 
@@ -272,7 +305,7 @@ function rangedMassAttackPower (target: AttackableAndRange) : number {
 }
 
 function autoRangedAttack (creep: Creep, attackables: Attackable[]) : CreepRangedAttackResult | CreepRangedMassAttackResult {
-  const inRange = attackables.map(
+  const inRange = attackables.filter(notZeroHits).map(
     function (target: Attackable) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
@@ -287,20 +320,26 @@ function autoRangedAttack (creep: Creep, attackables: Attackable[]) : CreepRange
   const totalMassAttackPower = inRange.map(rangedMassAttackPower).reduce((sum, current) => sum + current, 0)
 
   if (totalMassAttackPower >= RANGED_ATTACK_POWER) {
+    inRange.forEach(x => registerDamage(x.attackable, rangedMassAttackPower(x)))
     return creep.rangedMassAttack()
   } else {
     const target = inRange[0].attackable
+    registerDamage(target, RANGED_ATTACK_POWER)
     return creep.rangedAttack(target)
   }
 }
 
 function autoSelfHeal (creep: Creep) : CreepHealResult {
-  if (notMaxHits(creep)) return creep.heal(creep)
+  if (notMaxHits(creep)) {
+    registerHeal(creep, HEAL_POWER)
+    return creep.heal(creep)
+  }
+  
   return ERR_NOT_IN_RANGE
 }
 
 function autoMeleeHeal (creep: Creep, healables: Creep[]) : CreepHealResult {
-  const inRange = healables.map(
+  const inRange = healables.filter(notMaxHits).map(
     function (target: Creep) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
@@ -315,11 +354,12 @@ function autoMeleeHeal (creep: Creep, healables: Creep[]) : CreepHealResult {
 
   const target = inRange[0].attackable as Creep
   new Visual().line(creep as Position, target as Position, { color: '#65fd62' as Color } as LineVisualStyle)
+  registerHeal(target, HEAL_POWER)
   return creep.heal(target)
 }
 
 function autoRangedHeal (creep: Creep, healables: Creep[]) : CreepRangedHealResult {
-  const inRange = healables.map(
+  const inRange = healables.filter(notMaxHits).map(
     function (target: Creep) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
@@ -333,6 +373,7 @@ function autoRangedHeal (creep: Creep, healables: Creep[]) : CreepRangedHealResu
   if (inRange.length === 0) return ERR_NOT_IN_RANGE
 
   const target = inRange[0].attackable as Creep
+  registerHeal(target, RANGED_HEAL_POWER)
   return creep.rangedHeal(target)
 }
 
@@ -444,8 +485,6 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
 }
 
 function autoCombat () {
-  myPlayerInfo.towers.filter(operational).forEach(operateTower)
-
   // attacking towers is possible, but not practical
   // const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
   // const enemyTowers = enemyPlayerInfo.towers.filter(operational)
@@ -459,6 +498,7 @@ function autoCombat () {
   )
 
   const myCreeps = myPlayerInfo.creeps.filter(operational)
+
   const myHealableCreeps = myCreeps.filter(notMaxHits).sort(
     function (a: Creep, b: Creep) : number {
       return creepHurtCost(b) - creepHurtCost(a)
@@ -470,6 +510,9 @@ function autoCombat () {
       autoAll(creep, enemyAttackables, myHealableCreeps)
     }
   )
+
+  // towers operate after since they have better range and can be more tactical
+  myPlayerInfo.towers.filter(operational).forEach(operateTower)
 }
 
 class CreepLine {
