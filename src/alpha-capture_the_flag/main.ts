@@ -816,9 +816,9 @@ class BodyPartGoal implements Goal {
               return bodyPart.type === type
             }
           )
-        }
-      ),
-      this
+        },
+        this
+      )
     }
 
     const goals : Map<string, CreepPositionGoal> = new Map()
