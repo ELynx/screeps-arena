@@ -1,7 +1,7 @@
 import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
 
 import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower, CreepRangedMassAttackResult } from 'game/prototypes'
-import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH } from 'game/constants'
+import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH, BODYPART_COST, BODYPART_HITS, TOWER_POWER_ATTACK, TOWER_POWER_HEAL, ATTACK_POWER, HEAL_POWER, RANGED_HEAL_POWER } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
@@ -53,6 +53,11 @@ function allCreeps () : Creep[] {
   return _creepCache
 }
 
+const _hitsCache : Map<string, number> = new Map()
+function clearHitsCache () : void {
+  _hitsCache.clear()
+}
+
 class PlayerInfo {
   towers: StructureTower[] = []
   creeps: Creep[] = []
@@ -86,6 +91,8 @@ function collectPlayerInfo () : void {
 }
 
 export function loop () : void {
+  clearHitsCache()
+
   if (getTicks() === 1) {
     collectPlayerInfo()
     plan()
@@ -93,6 +100,8 @@ export function loop () : void {
 
   play()
 }
+
+type Attackable = Structure | Creep
 
 function exists (something?: GameObject) : boolean {
   if (something === undefined) return false
@@ -126,8 +135,25 @@ function countActiveBodyParts (creep: Creep) : Map<string, number> {
   return result
 }
 
+function registerHeal (creep: Creep, power: number) : void {
+  const now = _hitsCache.get(creep.id.toLocaleString()) || 0
+  _hitsCache.set(creep.id.toLocaleString(), now + power)
+}
+
+function registerDamage (attackable: Attackable, power: number) {
+  const now = _hitsCache.get(attackable.id.toLocaleString()) || 0
+  _hitsCache.set(attackable.id.toLocaleString(), now - power)
+}
+
 function notMaxHits (creep: Creep) : boolean {
-  return creep.hits < creep.hitsMax
+  const registered = _hitsCache.get(creep.id.toLocaleString()) || 0
+  return (creep.hits + registered) < creep.hitsMax
+}
+
+function notZeroHits (attackable: Attackable) : boolean {
+  const registered = _hitsCache.get(attackable.id.toLocaleString()) || 0
+  // overkill by double HP
+  return registered + (attackable.hits || 0) + (attackable.hitsMax || 0) > 0
 }
 
 function atSamePosition (a: Position, b: Position) : boolean {
@@ -152,48 +178,51 @@ function towerPower (fullAmount: number, range: number) : number {
   return Math.floor(effectiveAmount)
 }
 
+function creepHurtCost (creep: Creep) : number {
+  let total = 0
+  for (const bodyPart of creep.body) {
+    const cost = BODYPART_COST[bodyPart.type] || 0
+    const partHurt = 1 - bodyPart.hits / BODYPART_HITS
+
+    total += cost * partHurt
+  }
+  return total
+}
+
+function creepActiveCost (creep: Creep) : number {
+  let total = 0
+  for (const bodyPart of creep.body) {
+    const cost = BODYPART_COST[bodyPart.type] || 0
+    const partActive = bodyPart.hits / BODYPART_HITS
+
+    total += cost * partActive
+  }
+  return total
+}
+
 class StructureTowerScore {
   creep: Creep
   range: number
   score: number
+  power: number
 
   constructor (creep: Creep, range: number) {
     this.creep = creep
     this.range = range
     this.score = this.calculateScore()
+    this.power = this.calculatePower()
   }
 
   private calculateScore () : number {
-    // speed up process
     if (this.range > TOWER_RANGE) return 0
-    return this.creep.my ? this.calculateScoreMy() : this.calculateScoreEnemy()
+    const scoreAtOptimal = this.creep.my ? creepHurtCost(this.creep) : creepActiveCost(this.creep)
+    return towerPower(scoreAtOptimal, this.range)
   }
 
-  private calculateScoreMy () : number {
-    const hitsLost = this.creep.hitsMax - this.creep.hits
-    const percent = hitsLost / this.creep.hitsMax * 100
-    const withFalloff = towerPower(percent, this.range)
-
-    return Math.round(withFalloff)
-  }
-
-  private calculateScoreEnemy () : number {
-    let bodyCost = 0
-    for (const bodyPart of this.creep.body) {
-      if (bodyPart.hits <= 0) continue
-
-      // default pair of X + MOVE is 10 in sum
-      // ignore mutants for simplicity
-      if (bodyPart.type === ATTACK || bodyPart.type === HEAL) bodyCost += 6
-      else bodyCost += 4
-    }
-
-    // again ignore mutants for simplicity
-    const maxBodyCost = this.creep.body.length * 5
-    const percent = bodyCost / maxBodyCost * 100
-    const withFalloff = towerPower(percent, this.range)
-
-    return Math.round(withFalloff)
+  private calculatePower () : number {
+    if (this.range > TOWER_RANGE) return 0
+    const powerAtOptimal = this.creep.my ? TOWER_POWER_HEAL : TOWER_POWER_ATTACK
+    return towerPower(powerAtOptimal, this.range)
   }
 }
 
@@ -205,8 +234,7 @@ function operateTower (tower: StructureTower) : void {
     .filter(operational)
     .filter(
       function (creep: Creep) : boolean {
-        if (creep.my) return notMaxHits(creep)
-        return true
+        return creep.my ? notMaxHits(creep) : notZeroHits(creep)
       }
     )
     .map(
@@ -218,7 +246,7 @@ function operateTower (tower: StructureTower) : void {
     .filter(
       function (target: StructureTowerScore) : boolean {
         if (target.creep.my) {
-          return target.range <= TOWER_OPTIMAL_RANGE * 3
+          return target.range <= TOWER_OPTIMAL_RANGE * 2
         } else {
           return target.range <= TOWER_OPTIMAL_RANGE * 2
         }
@@ -232,16 +260,17 @@ function operateTower (tower: StructureTower) : void {
 
   if (allCreepsInRange.length === 0) return
 
+  const power = allCreepsInRange[0].power
   const target = allCreepsInRange[0].creep
 
   if (target.my) {
+    registerHeal(target, power)
     tower.heal(target)
   } else {
+    registerDamage(target, power)
     tower.attack(target)
   }
 }
-
-type Attackable = Structure | Creep
 
 class AttackableAndRange {
   attackable: Attackable
@@ -254,7 +283,7 @@ class AttackableAndRange {
 }
 
 function autoMeleeAttack (creep: Creep, attackables: Attackable[]) : CreepAttackResult {
-  const inRange = attackables.map(
+  const inRange = attackables.filter(notZeroHits).map(
     function (target: Attackable) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
@@ -268,6 +297,7 @@ function autoMeleeAttack (creep: Creep, attackables: Attackable[]) : CreepAttack
 
   const target = inRange[0].attackable
   new Visual().line(creep as Position, target as Position, { color: '#f93842' as Color } as LineVisualStyle)
+  registerDamage(target, ATTACK_POWER)
   return creep.attack(target)
 }
 
@@ -276,7 +306,7 @@ function rangedMassAttackPower (target: AttackableAndRange) : number {
 }
 
 function autoRangedAttack (creep: Creep, attackables: Attackable[]) : CreepRangedAttackResult | CreepRangedMassAttackResult {
-  const inRange = attackables.map(
+  const inRange = attackables.filter(notZeroHits).map(
     function (target: Attackable) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
@@ -291,20 +321,26 @@ function autoRangedAttack (creep: Creep, attackables: Attackable[]) : CreepRange
   const totalMassAttackPower = inRange.map(rangedMassAttackPower).reduce((sum, current) => sum + current, 0)
 
   if (totalMassAttackPower >= RANGED_ATTACK_POWER) {
+    inRange.forEach(x => registerDamage(x.attackable, rangedMassAttackPower(x)))
     return creep.rangedMassAttack()
   } else {
     const target = inRange[0].attackable
+    registerDamage(target, RANGED_ATTACK_POWER)
     return creep.rangedAttack(target)
   }
 }
 
 function autoSelfHeal (creep: Creep) : CreepHealResult {
-  if (notMaxHits(creep)) return creep.heal(creep)
+  if (notMaxHits(creep)) {
+    registerHeal(creep, HEAL_POWER)
+    return creep.heal(creep)
+  }
+
   return ERR_NOT_IN_RANGE
 }
 
 function autoMeleeHeal (creep: Creep, healables: Creep[]) : CreepHealResult {
-  const inRange = healables.map(
+  const inRange = healables.filter(notMaxHits).map(
     function (target: Creep) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
@@ -319,11 +355,12 @@ function autoMeleeHeal (creep: Creep, healables: Creep[]) : CreepHealResult {
 
   const target = inRange[0].attackable as Creep
   new Visual().line(creep as Position, target as Position, { color: '#65fd62' as Color } as LineVisualStyle)
+  registerHeal(target, HEAL_POWER)
   return creep.heal(target)
 }
 
 function autoRangedHeal (creep: Creep, healables: Creep[]) : CreepRangedHealResult {
-  const inRange = healables.map(
+  const inRange = healables.filter(notMaxHits).map(
     function (target: Creep) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
@@ -337,6 +374,7 @@ function autoRangedHeal (creep: Creep, healables: Creep[]) : CreepRangedHealResu
   if (inRange.length === 0) return ERR_NOT_IN_RANGE
 
   const target = inRange[0].attackable as Creep
+  registerHeal(target, RANGED_HEAL_POWER)
   return creep.rangedHeal(target)
 }
 
@@ -448,24 +486,34 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
 }
 
 function autoCombat () {
-  myPlayerInfo.towers.filter(operational).forEach(operateTower)
-
   // attacking towers is possible, but not practical
   // const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
   // const enemyTowers = enemyPlayerInfo.towers.filter(operational)
   // const enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
 
   // attack only enemy creeps
-  const enemyAttackables = enemyPlayerInfo.creeps.filter(operational)
+  const enemyAttackables = enemyPlayerInfo.creeps.filter(operational).sort(
+    function (a: Creep, b: Creep) : number {
+      return creepActiveCost(b) - creepActiveCost(a)
+    }
+  )
 
   const myCreeps = myPlayerInfo.creeps.filter(operational)
-  const myHealableCreeps = myCreeps.filter(notMaxHits)
+
+  const myHealableCreeps = myCreeps.filter(notMaxHits).sort(
+    function (a: Creep, b: Creep) : number {
+      return creepHurtCost(b) - creepHurtCost(a)
+    }
+  )
 
   myCreeps.forEach(
     function (creep) : void {
       autoAll(creep, enemyAttackables, myHealableCreeps)
     }
   )
+
+  // towers operate after since they have better range and can be more tactical
+  myPlayerInfo.towers.filter(operational).forEach(operateTower)
 }
 
 class CreepLine {
@@ -1288,19 +1336,19 @@ function plan () : void {
 
   const defenceGoals = GridCreepPositionGoalBuilder.around(myFlag as Position)
     .setOffsetXY(-3, -3)
-    .withCreepToXY(expected[0], 6, 6)
-    .withCreepToXY(expected[1], 5, 5)
-    .withCreepToXY(expected[2], 6, 4)
-    .withCreepToXY(expected[3], 5, 7)
-    .withCreepToXY(expected[4], 5, 2)
-    .withCreepToXY(expected[5], 3, 5)
-    .withCreepToXY(expected[6], 4, 3)
-    .withCreepToXY(expected[7], 3, 4)
-    .withCreepToXY(expected[8], 4, 4)
-    .withCreepToXY(expected[9], 2, 5)
-    .withCreepToXY(expected[10], 7, 5)
-    .withCreepToXY(expected[11], 4, 6)
-    .withCreepToXY(expected[12], 5, 3)
+    .withCreepToXY(expected[0], 6, 3)
+    .withCreepToXY(expected[1], 3, 6)
+    .withCreepToXY(expected[2], 7, 3)
+    .withCreepToXY(expected[3], 3, 7)
+    .withCreepToXY(expected[4], 5, 3)
+    .withCreepToXY(expected[5], 3, 4)
+    .withCreepToXY(expected[6], 3, 5)
+    .withCreepToXY(expected[7], 4, 3)
+    .withCreepToXY(expected[8], 2, 5)
+    .withCreepToXY(expected[9], 4, 4)
+    .withCreepToXY(expected[10], 6, 2)
+    .withCreepToXY(expected[11], 2, 6)
+    .withCreepToXY(expected[12], 5, 2)
     .withCreepToXY(expected[13], 3, 3) // doorstop
     .autoRotate()
     .build()
