@@ -821,39 +821,48 @@ class BodyPartGoal implements Goal {
       )
     }
 
-    // 1st so following can override
-    const rcTough : CreepMoveResult = BodyPartGoal.goalsForGroup(
+    const goals : Map<string, CreepPositionGoal> = new Map()
+    const addToGoals = function (goal: CreepPositionGoal) : void {
+      goals.set(goal.creep.id.toLocaleString(), goal)
+    }
+
+    BodyPartGoal.goalsForGroup(
       creepsWithExtraMove,
       bodyPartsOfType(TOUGH),
       options
-    )
+    ).forEach(addToGoals)
 
-    // everyone want MOVE
-    const rcMove : CreepMoveResult = BodyPartGoal.goalsForGroup(
+    BodyPartGoal.goalsForGroup(
       this.creeps,
       bodyPartsOfType(MOVE),
       options
-    )
+      ).forEach(addToGoals)
 
-    const rcAttack : CreepMoveResult = BodyPartGoal.goalsForGroup(
+    BodyPartGoal.goalsForGroup(
       creepsWithExtraMoveAndBodyPart(ATTACK),
       bodyPartsOfType(ATTACK),
       options
-    )
+      ).forEach(addToGoals)
 
-    const rcRangedAttack : CreepMoveResult = BodyPartGoal.goalsForGroup(
+    BodyPartGoal.goalsForGroup(
       creepsWithExtraMoveAndBodyPart(RANGED_ATTACK),
       bodyPartsOfType(RANGED_ATTACK),
       options
-    )
+      ).forEach(addToGoals)
 
-    const rcHeal : CreepMoveResult = BodyPartGoal.goalsForGroup(
+    BodyPartGoal.goalsForGroup(
       creepsWithExtraMoveAndBodyPart(HEAL),
       bodyPartsOfType(HEAL),
       options
-    )
+      ).forEach(addToGoals)
 
-    return Math.min(rcTough, rcMove, rcAttack, rcRangedAttack, rcHeal) as CreepMoveResult
+    let totalRc : CreepMoveResult = OK
+    for (const goal of goals.values()) {
+      const rc = goal.advance(options)
+      if (rc < totalRc) totalRc = rc
+    }
+
+    return totalRc
   }
 
   private static goalsForGroup (creeps: Creep[], bodyParts: BodyPart[], options?: MoreFindPathOptions) : CreepPositionGoal[] {
