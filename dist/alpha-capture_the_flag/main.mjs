@@ -653,24 +653,12 @@ class BodyPartGoal {
         const addToGoalsPerCreep = function (goal) {
             goals.set(goal.creep.id.toLocaleString(), goal);
         };
-        const addToGoalsPerTarget = function (inGoal) {
-            const ids = [];
-            for (const goal of goals.values()) {
-                if (atSamePosition(inGoal.position, goal.position)) {
-                    ids.push(goal.creep.id.toLocaleString());
-                }
-            }
-            for (const id of ids) {
-                goals.delete(id);
-            }
-            goals.set(inGoal.creep.id.toLocaleString(), inGoal);
-        };
         BodyPartGoal.goalsForGroup(allCreeps, bodyPartsOfType(TOUGH)).forEach(addToGoalsPerCreep);
         BodyPartGoal.goalsForGroup(allCreeps, bodyPartsOfType(MOVE)).forEach(addToGoalsPerCreep);
         BodyPartGoal.goalsForGroup(creepsWithBodyPart(ATTACK), bodyPartsOfType(ATTACK)).forEach(addToGoalsPerCreep);
         BodyPartGoal.goalsForGroup(creepsWithBodyPart(RANGED_ATTACK), bodyPartsOfType(RANGED_ATTACK)).forEach(addToGoalsPerCreep);
         BodyPartGoal.goalsForGroup(creepsWithBodyPart(HEAL), bodyPartsOfType(HEAL)).forEach(addToGoalsPerCreep);
-        BodyPartGoal.goalsForGroup(creepsWithNotEnoughMove, bodyPartsOfType(MOVE)).forEach(addToGoalsPerTarget);
+        BodyPartGoal.goalsForGroup(creepsWithNotEnoughMove, bodyPartsOfType(MOVE)).forEach(addToGoalsPerCreep);
         let totalRc = OK;
         for (const goal of goals.values()) {
             const rc = goal.advance(options);
