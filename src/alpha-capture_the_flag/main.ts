@@ -54,7 +54,7 @@ function allCreeps () : Creep[] {
 }
 
 const _hitsCache : Map<string, number> = new Map()
-function clearHitsCache() : void {
+function clearHitsCache () : void {
   _hitsCache.clear()
 }
 
@@ -262,7 +262,7 @@ function operateTower (tower: StructureTower) : void {
 
   const power = allCreepsInRange[0].power
   const target = allCreepsInRange[0].creep
-  
+
   if (target.my) {
     registerHeal(target, power)
     tower.heal(target)
@@ -335,7 +335,7 @@ function autoSelfHeal (creep: Creep) : CreepHealResult {
     registerHeal(creep, HEAL_POWER)
     return creep.heal(creep)
   }
-  
+
   return ERR_NOT_IN_RANGE
 }
 
