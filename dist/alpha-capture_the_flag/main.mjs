@@ -18,9 +18,6 @@ const MAP_SIDE_SIZE_SQRT = Math.round(Math.sqrt(MAP_SIDE_SIZE));
 function get8WayGridRange(a, b) {
     return Math.min(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
-function gameObjectToCostPoint(gameObject) {
-    return [gameObject.x, gameObject.y];
-}
 function sortById(a, b) {
     return a.id.toString().localeCompare(b.id.toString());
 }
@@ -687,34 +684,48 @@ class BodyPartGoal {
             return [];
         if (creeps.length === 0)
             return [];
-        const distanceMetricAdapter = function (p1, p2) {
-            return get8WayGridRange({ x: p1[0], y: p1[0] }, { x: p2[0], y: p2[0] });
-        };
-        const actorPoints = creeps.map(gameObjectToCostPoint);
-        const reachablePoints = bodyParts
-            .filter(function (bodyPart) {
-            return actorPoints.some(function (actorPoint) {
-                return distanceMetricAdapter(gameObjectToCostPoint(bodyPart), actorPoint) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT;
-            });
-        }).map(gameObjectToCostPoint);
-        if (reachablePoints.length === 0)
-            return [];
-        let targetPoints = [];
-        while (targetPoints.length < actorPoints.length) {
-            targetPoints = targetPoints.concat(reachablePoints);
+        let expandedBodyParts = bodyParts;
+        while (expandedBodyParts.length < creeps.length) {
+            expandedBodyParts = expandedBodyParts.concat(bodyParts);
         }
+        const actors = [];
+        for (let i = 0; i < creeps.length; ++i) {
+            const creep = creeps[i];
+            actors.push([creep.x, creep.y, -creep.fatigue]);
+        }
+        const targetPoints = [];
+        for (let i = 0; i < expandedBodyParts.length; ++i) {
+            const bodyPart = expandedBodyParts[i];
+            targetPoints.push([bodyPart.x, bodyPart.y, bodyPart.ticksToDecay]);
+        }
+        const COST_NO_ASSIGN = 100000;
+        const distanceMetric = function (actor, targetPoint) {
+            const dx = Math.abs(actor[0] - targetPoint[0]);
+            const dy = Math.abs(actor[1] - targetPoint[1]);
+            const dt = Math.abs(actor[2] - targetPoint[2]);
+            const flatRange = Math.max(dx, dy);
+            // with some extra time for swamp and corners
+            if (flatRange > dt - MAP_SIDE_SIZE_SQRT)
+                return COST_NO_ASSIGN;
+            return flatRange;
+        };
         const assignments = assignToGrids({
+            assignTo: actors,
             points: targetPoints,
-            assignTo: actorPoints,
-            distanceMetric: distanceMetricAdapter
+            distanceMetric
         });
         const result = [];
         for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
-            const creep = creeps[actorIndex];
             const targetIndex = assignments[actorIndex];
+            // since there is no cost returned, do manual extra check
+            const actor = actors[actorIndex];
             const targetPoint = targetPoints[targetIndex];
-            const target = { x: targetPoint[0], y: targetPoint[1] };
-            const goal = new CreepPositionGoal(creep, target);
+            const cost = distanceMetric(actor, targetPoint);
+            if (cost >= COST_NO_ASSIGN)
+                continue;
+            const creep = creeps[actorIndex];
+            const bodyPart = expandedBodyParts[targetIndex];
+            const goal = new CreepPositionGoal(creep, bodyPart);
             result.push(goal);
         }
         return result;
