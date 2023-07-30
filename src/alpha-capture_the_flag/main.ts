@@ -4,11 +4,10 @@ import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResul
 import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
-import { searchPath } from 'game/path-finder'
 import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
 
 // custom demands to navigation
-type MoreFindPathOptions = FindPathOptions & { backwards?: boolean, costByPath?: boolean }
+type MoreFindPathOptions = FindPathOptions
 
 // assumption, no constant given
 const MAP_SIDE_SIZE : number = 100
@@ -495,12 +494,10 @@ class CreepLine {
   }
 
   protected locoToWagonIndex (magicNumber: number, options?: MoreFindPathOptions) : number {
-    if (options && options.backwards === true) return this.wagonToLocoIndex(magicNumber)
     return magicNumber
   }
 
   protected wagonToLocoIndex (magicNumber: number, options?: MoreFindPathOptions) : number {
-    if (options && options.backwards === true) return this.locoToWagonIndex(magicNumber)
     return this.creeps.length - 1 - magicNumber
   }
 
@@ -509,13 +506,7 @@ class CreepLine {
       const ri = this.locoToWagonIndex(i, options)
       const loco = this.creeps[ri]
       if (operational(loco)) {
-        if (options && options.costByPath) {
-          const path = searchPath(loco as Position, target, options)
-          if (path.incomplete) return Number.MAX_SAFE_INTEGER
-          return path.cost / (options.plainCost || 2)
-        } else {
-          return get8WayGridRange(loco as Position, target)
-        }
+        return get8WayGridRange(loco as Position, target)
       }
     }
 
@@ -572,13 +563,6 @@ class CreepLine {
 
     return OK
   }
-}
-
-function operationalCreepLine (creepLine: CreepLine) : boolean {
-  for (const creep of creepLine.creeps) {
-    if (operational(creep)) return true
-  }
-  return false
 }
 
 class Rotator {
@@ -684,14 +668,7 @@ class CreepPositionGoal implements Goal {
 
   cost (options?: MoreFindPathOptions): number {
     if (!operational(this.creep)) return Number.MAX_SAFE_INTEGER
-
-    if (options && options.costByPath) {
-      const path = searchPath(this.creep as Position, this.position, options)
-      if (path.incomplete) return Number.MAX_SAFE_INTEGER
-      return path.cost / (options.plainCost || 2)
-    } else {
-      return get8WayGridRange(this.creep as Position, this.position)
-    }
+    return get8WayGridRange(this.creep as Position, this.position)
   }
 }
 
@@ -790,174 +767,161 @@ class LinePositionGoal implements Goal {
   }
 }
 
-class LinePositionGoalWithAutoReverse extends LinePositionGoal {
-  canReverseTick: number // tick in future
-  backwards: boolean
-
-  protected constructor (creepLine: CreepLine, position: Position) {
-    super(creepLine, position)
-    this.canReverseTick = Number.MIN_SAFE_INTEGER
-    this.backwards = false
-  }
-
-  static of (creeps: Creep[], position: Position) : LinePositionGoalWithAutoReverse {
-    const creepLine = new CreepLine(creeps)
-    return new LinePositionGoalWithAutoReverse(creepLine, position)
-  }
-
-  static ofCreepLine (creepLine: CreepLine, position: Position) : LinePositionGoalWithAutoReverse {
-    return new LinePositionGoalWithAutoReverse(creepLine, position)
-  }
-
-  advance (options?: MoreFindPathOptions): CreepMoveResult {
-    const ticks = getTicks()
-
-    if (ticks >= this.canReverseTick) {
-      const costByPathOptions = Object.assign(options || {}, { costByPath: true })
-
-      const fff = this.costForwards(costByPathOptions)
-      const bbb = this.costBackwards(costByPathOptions)
-      const delta = fff - bbb
-
-      let newBackwards = this.backwards
-
-      if (delta > 0) {
-        // forward is more expensive than backward
-        newBackwards = true
-      } else if (delta < 0) {
-        // backward is more expensive than forwards
-        newBackwards = false
-      }
-
-      if (newBackwards !== this.backwards) {
-        this.canReverseTick = ticks + 2 * this.creepLine.creeps.length
-        this.backwards = newBackwards
-      }
-    }
-
-    const copyOptions = Object.assign(options || {}, { backwards: this.backwards })
-    return super.advance(copyOptions)
-  }
-
-  cost (options?: MoreFindPathOptions): number {
-    if (getTicks() >= this.canReverseTick) {
-      return Math.min(this.costForwards(options), this.costBackwards(options))
-    }
-
-    if (this.backwards) {
-      return this.costBackwards(options)
-    } else {
-      return this.costForwards(options)
-    }
-  }
-
-  private costForwards (options?: MoreFindPathOptions): number {
-    const copyOptions = Object.assign(options || {}, { backwards: false })
-    return super.cost(copyOptions)
-  }
-
-  private costBackwards (options?: MoreFindPathOptions): number {
-    const copyOptions = Object.assign(options || {}, { backwards: true })
-    return super.cost(copyOptions)
-  }
-}
-
 class BodyPartGoal implements Goal {
   creeps: Creep[]
-  creepLines: CreepLine[]
 
   constructor () {
     this.creeps = []
-    this.creepLines = []
   }
 
   addCreep (creep: Creep) {
     this.creeps.push(creep)
   }
 
-  addCreepLine (creepLine: CreepLine) {
-    this.creepLines.push(creepLine)
-  }
-
   advance (options?: MoreFindPathOptions): CreepMoveResult {
     const allBodyPards = getObjectsByPrototype(BodyPart)
     if (allBodyPards.length === 0) return OK
 
-    this.creeps = this.creeps.filter(operational)
-    this.creepLines = this.creepLines.filter(operationalCreepLine)
-
-    if (this.creeps.length === 0 && this.creepLines.length === 0) return ERR_NO_BODYPART
-
-    const actorPoints : CostPoint[] = []
-
-    // only operational left
-    for (const creep of this.creeps) {
-      actorPoints.push([creep.x, creep.y])
-    }
-
-    // only operational left, meaning there is an operational creep inside
-    for (const creepLine of this.creepLines) {
-      for (const creep of creepLine.creeps) {
-        if (operational(creep)) {
-          // approximation
-          actorPoints.push([creep.x, creep.y])
-          break // to next creepLine
+    const bodyPartsOfType = function (type: string) : BodyPart[] {
+      return allBodyPards.filter(
+        function (bodyPart: BodyPart) : boolean {
+          return bodyPart.type === type
         }
-      }
+      )
     }
 
-    const bodyParts = allBodyPards.filter(
-      function (bodyPart: BodyPart) : boolean {
-        return actorPoints.some(
-          function (point: CostPoint) : boolean {
-            return get8WayGridRange(bodyPart as Position, { x: point[0], y: point[1] } as Position) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT
-          }
-        )
+    this.creeps = this.creeps.filter(operational)
+    if (this.creeps.length === 0) return ERR_NO_BODYPART
+
+    const notEnoughMove = function (creep: Creep) : boolean {
+      let balance = 0
+      for (const bodyPart of creep.body) {
+        if (bodyPart.type === MOVE) ++balance
+        else --balance
       }
-    )
-
-    if (bodyParts.length === 0) return OK
-
-    let targetPoints = bodyParts.map(
-      function (bodyPart: BodyPart) : CostPoint {
-        return [bodyPart.x, bodyPart.y]
-      }
-    )
-
-    while (targetPoints.length < actorPoints.length) {
-      targetPoints = targetPoints.concat(targetPoints)
+      return balance < 0
     }
 
-    const get8WayGridRangeAdapter : CostFunction = function (p1: CostPoint, p2: CostPoint) : number {
-      return get8WayGridRange({ x: p1[0], y: p1[0] } as Position, { x: p2[0], y: p2[0] } as Position)
+    const allCreeps = this.creeps
+    const creepsWithNotEnoughMove = allCreeps.filter(notEnoughMove)
+
+    const creepsWithBodyPart = function (type: string) : Creep[] {
+      return allCreeps.filter(
+        function (creep: Creep) : boolean {
+          return creep.body.some(
+            function (bodyPart: BodyPartType) : boolean {
+              return bodyPart.type === type
+            }
+          )
+        }
+      )
     }
 
-    const assignments = assignToGrids({
-      points: targetPoints,
-      assignTo: actorPoints,
-      distanceMetric: get8WayGridRangeAdapter
-    })
+    const goals : Map<string, CreepPositionGoal> = new Map()
+
+    const addToGoalsPerCreep = function (goal: CreepPositionGoal) : void {
+      goals.set(goal.creep.id.toLocaleString(), goal)
+    }
+
+    BodyPartGoal.goalsForGroup(
+      allCreeps,
+      bodyPartsOfType(TOUGH)
+    ).forEach(addToGoalsPerCreep)
+
+    BodyPartGoal.goalsForGroup(
+      allCreeps,
+      bodyPartsOfType(MOVE)
+    ).forEach(addToGoalsPerCreep)
+
+    BodyPartGoal.goalsForGroup(
+      creepsWithBodyPart(ATTACK),
+      bodyPartsOfType(ATTACK)
+    ).forEach(addToGoalsPerCreep)
+
+    BodyPartGoal.goalsForGroup(
+      creepsWithBodyPart(RANGED_ATTACK),
+      bodyPartsOfType(RANGED_ATTACK)
+    ).forEach(addToGoalsPerCreep)
+
+    BodyPartGoal.goalsForGroup(
+      creepsWithBodyPart(HEAL),
+      bodyPartsOfType(HEAL)
+    ).forEach(addToGoalsPerCreep)
+
+    BodyPartGoal.goalsForGroup(
+      creepsWithNotEnoughMove,
+      bodyPartsOfType(MOVE)
+    ).forEach(addToGoalsPerCreep)
 
     let totalRc : CreepMoveResult = OK
-    for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
-      const targetIndex = assignments[actorIndex]
-      const targetPoint = targetPoints[targetIndex]
-      const target = { x: targetPoint[0], y: targetPoint[1] } as Position
-
-      if (actorIndex < this.creeps.length) {
-        const creep = this.creeps[actorIndex]
-        const goal = new CreepPositionGoal(creep, target)
-        const rc = goal.advance(options)
-        if (rc < totalRc) totalRc = rc
-      } else {
-        const creepLine = this.creepLines[actorIndex - this.creeps.length]
-        const goal = LinePositionGoalWithAutoReverse.ofCreepLine(creepLine, target)
-        const rc = goal.advance(options)
-        if (rc < totalRc) totalRc = rc
-      }
+    for (const goal of goals.values()) {
+      const rc = goal.advance(options)
+      if (rc < totalRc) totalRc = rc
     }
 
     return totalRc
+  }
+
+  private static goalsForGroup (creeps: Creep[], bodyParts: BodyPart[]) : CreepPositionGoal[] {
+    if (bodyParts.length === 0) return []
+    if (creeps.length === 0) return []
+
+    let expandedBodyParts = bodyParts
+    while (expandedBodyParts.length < creeps.length) {
+      expandedBodyParts = expandedBodyParts.concat(bodyParts)
+    }
+
+    const actors : CostPoint[] = []
+    for (let i = 0; i < creeps.length; ++i) {
+      const creep = creeps[i]
+      actors.push([creep.x, creep.y, -creep.fatigue])
+    }
+
+    const targetPoints : CostPoint[] = []
+    for (let i = 0; i < expandedBodyParts.length; ++i) {
+      const bodyPart = expandedBodyParts[i]
+      targetPoints.push([bodyPart.x, bodyPart.y, bodyPart.ticksToDecay])
+    }
+
+    const COST_NO_ASSIGN = 100000
+    const distanceMetric : CostFunction = function (actor: CostPoint, targetPoint: CostPoint) : number {
+      const dx = Math.abs(actor[0] - targetPoint[0])
+      const dy = Math.abs(actor[1] - targetPoint[1])
+      const dt = Math.abs(actor[2] - targetPoint[2])
+
+      const flatRange = Math.max(dx, dy)
+
+      // with some extra time for swamp and corners
+      if (flatRange > dt - MAP_SIDE_SIZE_SQRT) return COST_NO_ASSIGN
+
+      return flatRange
+    }
+
+    const assignments = assignToGrids({
+      assignTo: actors,
+      points: targetPoints,
+      distanceMetric
+    })
+
+    const result : CreepPositionGoal[] = []
+
+    for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
+      const targetIndex = assignments[actorIndex]
+
+      // since there is no cost returned, do manual extra check
+      const actor = actors[actorIndex]
+      const targetPoint = targetPoints[targetIndex]
+      const cost = distanceMetric(actor, targetPoint)
+      if (cost >= COST_NO_ASSIGN) continue
+
+      const creep = creeps[actorIndex]
+      const bodyPart = expandedBodyParts[targetIndex]
+
+      const goal = new CreepPositionGoal(creep, bodyPart as Position)
+      result.push(goal)
+    }
+
+    return result
   }
 
   cost (options?: MoreFindPathOptions): number {
@@ -1301,7 +1265,7 @@ function plan () : void {
     .autoRotate()
     .build()
 
-  const powerUp1 = new BodyPartGoal()
+  const powerUpAll = new BodyPartGoal()
   for (const defenceGoal of defenceGoals) {
     const rushGoal = new CreepPositionGoal(defenceGoal.creep, enemyFlag as Position)
 
@@ -1309,9 +1273,9 @@ function plan () : void {
     rushRandom.push(rushGoal)
     defenceOrRushRandom.push(new OrGoal([defenceGoal, rushGoal]))
 
-    powerUp1.addCreep(defenceGoal.creep)
+    powerUpAll.addCreep(defenceGoal.creep)
   }
-  powerUp.push(powerUp1)
+  powerUp.push(powerUpAll)
 
   const line1 : CreepPositionGoal[] = [defenceGoals[0], defenceGoals[10], defenceGoals[2]]
   const line2 : CreepPositionGoal[] = [defenceGoals[4], defenceGoals[12]]
@@ -1320,7 +1284,7 @@ function plan () : void {
   const line5 : CreepPositionGoal[] = [defenceGoals[5], defenceGoals[9], defenceGoals[7]]
   const lines : CreepPositionGoal[][] = [line1, line2, line3, line4, line5]
 
-  const powerUp2 = new BodyPartGoal()
+  const powerUpActive = new BodyPartGoal()
   for (const line of lines) {
     const doDefence = new AndGoal(line)
     const doOffence = LinePositionGoal.of(line.map(
@@ -1331,9 +1295,12 @@ function plan () : void {
 
     rushOrganised.push(doOffence)
     defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]))
-    powerUp2.addCreepLine(doOffence.creepLine)
+
+    for (const goal of line) {
+      powerUpActive.addCreep(goal.creep)
+    }
   }
-  prepare.push(powerUp2)
+  prepare.push(powerUpActive)
 
   // don't forget intentional doorstep
   rushOrganised.push(defenceGoals[13])
