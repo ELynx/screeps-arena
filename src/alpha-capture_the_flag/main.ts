@@ -164,17 +164,16 @@ class StructureTowerScore {
   }
 
   private calculateScore () : number {
-    // speed up process
     if (this.range > TOWER_RANGE) return 0
-    return this.creep.my ? this.calculateScoreMy() : this.calculateScoreEnemy()
+
+    const scoreAtOptimal = this.creep.my ? this.calculateScoreMy() : this.calculateScoreEnemy()
+    const withFalloff = towerPower(scoreAtOptimal, this.range)
+    return Math.round(withFalloff)
   }
 
   private calculateScoreMy () : number {
     const hitsLost = this.creep.hitsMax - this.creep.hits
-    const percent = hitsLost / this.creep.hitsMax * 100
-    const withFalloff = towerPower(percent, this.range)
-
-    return Math.round(withFalloff)
+    return hitsLost / this.creep.hitsMax * 100
   }
 
   private calculateScoreEnemy () : number {
@@ -190,10 +189,7 @@ class StructureTowerScore {
 
     // again ignore mutants for simplicity
     const maxBodyCost = this.creep.body.length * 5
-    const percent = bodyCost / maxBodyCost * 100
-    const withFalloff = towerPower(percent, this.range)
-
-    return Math.round(withFalloff)
+    return bodyCost / maxBodyCost * 100
   }
 }
 
