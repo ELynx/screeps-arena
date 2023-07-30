@@ -822,32 +822,32 @@ class BodyPartGoal implements Goal {
     }
 
     // 1st so following can override
-    const rcTough : CreepMoveResult = BodyPartGoal.advanceOneGroup(
+    const rcTough : CreepMoveResult = BodyPartGoal.goalsForGroup(
       creepsWithExtraMove,
       bodyPartsOfType(TOUGH),
       options
     )
 
     // everyone want MOVE
-    const rcMove : CreepMoveResult = BodyPartGoal.advanceOneGroup(
+    const rcMove : CreepMoveResult = BodyPartGoal.goalsForGroup(
       this.creeps,
       bodyPartsOfType(MOVE),
       options
     )
 
-    const rcAttack : CreepMoveResult = BodyPartGoal.advanceOneGroup(
+    const rcAttack : CreepMoveResult = BodyPartGoal.goalsForGroup(
       creepsWithExtraMoveAndBodyPart(ATTACK),
       bodyPartsOfType(ATTACK),
       options
     )
 
-    const rcRangedAttack : CreepMoveResult = BodyPartGoal.advanceOneGroup(
+    const rcRangedAttack : CreepMoveResult = BodyPartGoal.goalsForGroup(
       creepsWithExtraMoveAndBodyPart(RANGED_ATTACK),
       bodyPartsOfType(RANGED_ATTACK),
       options
     )
 
-    const rcHeal : CreepMoveResult = BodyPartGoal.advanceOneGroup(
+    const rcHeal : CreepMoveResult = BodyPartGoal.goalsForGroup(
       creepsWithExtraMoveAndBodyPart(HEAL),
       bodyPartsOfType(HEAL),
       options
@@ -856,9 +856,9 @@ class BodyPartGoal implements Goal {
     return Math.min(rcTough, rcMove, rcAttack, rcRangedAttack, rcHeal) as CreepMoveResult
   }
 
-  private static advanceOneGroup (creeps: Creep[], bodyParts: BodyPart[], options?: MoreFindPathOptions) : CreepMoveResult {
-    if (bodyParts.length === 0) return OK
-    if (creeps.length === 0) return ERR_NO_BODYPART
+  private static goalsForGroup (creeps: Creep[], bodyParts: BodyPart[], options?: MoreFindPathOptions) : CreepPositionGoal[] {
+    if (bodyParts.length === 0) return []
+    if (creeps.length === 0) return []
 
     const distanceMetricAdapter : CostFunction = function (p1: CostPoint, p2: CostPoint) : number {
       return get8WayGridRange({ x: p1[0], y: p1[0] } as Position, { x: p2[0], y: p2[0] } as Position)
@@ -877,7 +877,7 @@ class BodyPartGoal implements Goal {
         }
       ).map(gameObjectToCostPoint)
 
-    if (reachablePoints.length === 0) return OK
+    if (reachablePoints.length === 0) return []
 
     let targetPoints : CostPoint[] = []
     while (targetPoints.length < actorPoints.length) {
@@ -890,7 +890,7 @@ class BodyPartGoal implements Goal {
       distanceMetric: distanceMetricAdapter
     })
 
-    let totalRc : CreepMoveResult = OK
+    const result : CreepPositionGoal[] = []
     for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
       const creep = creeps[actorIndex]
 
@@ -899,11 +899,10 @@ class BodyPartGoal implements Goal {
       const target = { x: targetPoint[0], y: targetPoint[1] } as Position
 
       const goal = new CreepPositionGoal(creep, target)
-      const rc = goal.advance(options)
-      if (rc < totalRc) totalRc = rc
+      result.push(goal)
     }
 
-    return totalRc
+    return result
   }
 
   cost (options?: MoreFindPathOptions): number {
