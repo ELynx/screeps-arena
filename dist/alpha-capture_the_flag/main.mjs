@@ -1,6 +1,6 @@
 import assignToGrids from './node_modules/grid-assign-js/dist/lap-jv/index.mjs';
 import { StructureTower, Creep } from '/game/prototypes';
-import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, BODYPART_COST, BODYPART_HITS, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, TOUGH, ERR_TIRED, ERR_INVALID_ARGS, TOWER_RANGE, ERR_NOT_IN_RANGE, RANGED_ATTACK_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
+import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, BODYPART_COST, BODYPART_HITS, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, TOUGH, ERR_TIRED, ERR_INVALID_ARGS, TOWER_RANGE, TOWER_POWER_HEAL, TOWER_POWER_ATTACK, ERR_NOT_IN_RANGE, ATTACK_POWER, RANGED_ATTACK_POWER, HEAL_POWER, RANGED_HEAL_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
 import { getTicks, getCpuTime, getObjectsByPrototype, getRange, getDirection } from '/game/utils';
 import { Visual } from '/game/visual';
 import { Flag, BodyPart } from '/arena/season_alpha/capture_the_flag/basic';
@@ -42,6 +42,10 @@ function allCreeps() {
     }
     return _creepCache;
 }
+const _hitsCache = new Map();
+function clearHitsCache() {
+    _hitsCache.clear();
+}
 class PlayerInfo {
     constructor() {
         this.towers = [];
@@ -67,6 +71,7 @@ function collectPlayerInfo() {
     enemyPlayerInfo = fillPlayerInfo(enemyOwnable);
 }
 function loop() {
+    clearHitsCache();
     if (getTicks() === 1) {
         collectPlayerInfo();
         plan();
@@ -102,8 +107,22 @@ function countActiveBodyParts(creep) {
     }
     return result;
 }
+function registerHeal(creep, power) {
+    const now = _hitsCache.get(creep.id.toLocaleString()) || 0;
+    _hitsCache.set(creep.id.toLocaleString(), now + power);
+}
+function registerDamage(attackable, power) {
+    const now = _hitsCache.get(attackable.id.toLocaleString()) || 0;
+    _hitsCache.set(attackable.id.toLocaleString(), now - power);
+}
 function notMaxHits(creep) {
-    return creep.hits < creep.hitsMax;
+    const registered = _hitsCache.get(creep.id.toLocaleString()) || 0;
+    return (creep.hits + registered) < creep.hitsMax;
+}
+function notZeroHits(attackable) {
+    const registered = _hitsCache.get(attackable.id.toLocaleString()) || 0;
+    // overkill by double HP
+    return registered + (attackable.hits || 0) + (attackable.hitsMax || 0) > 0;
 }
 function atSamePosition(a, b) {
     return a.x === b.x && a.y === b.y;
@@ -145,13 +164,19 @@ class StructureTowerScore {
         this.creep = creep;
         this.range = range;
         this.score = this.calculateScore();
+        this.power = this.calculatePower();
     }
     calculateScore() {
         if (this.range > TOWER_RANGE)
             return 0;
         const scoreAtOptimal = this.creep.my ? creepHurtCost(this.creep) : creepActiveCost(this.creep);
-        const withFalloff = towerPower(scoreAtOptimal, this.range);
-        return Math.round(withFalloff);
+        return towerPower(scoreAtOptimal, this.range);
+    }
+    calculatePower() {
+        if (this.range > TOWER_RANGE)
+            return 0;
+        const powerAtOptimal = this.creep.my ? TOWER_POWER_HEAL : TOWER_POWER_ATTACK;
+        return towerPower(powerAtOptimal, this.range);
     }
 }
 function operateTower(tower) {
@@ -162,9 +187,7 @@ function operateTower(tower) {
     const allCreepsInRange = allCreeps()
         .filter(operational)
         .filter(function (creep) {
-        if (creep.my)
-            return notMaxHits(creep);
-        return true;
+        return creep.my ? notMaxHits(creep) : notZeroHits(creep);
     })
         .map(function (creep) {
         const range = getRange(tower, creep);
@@ -183,11 +206,14 @@ function operateTower(tower) {
     });
     if (allCreepsInRange.length === 0)
         return;
+    const power = allCreepsInRange[0].power;
     const target = allCreepsInRange[0].creep;
     if (target.my) {
+        registerHeal(target, power);
         tower.heal(target);
     }
     else {
+        registerDamage(target, power);
         tower.attack(target);
     }
 }
@@ -198,7 +224,7 @@ class AttackableAndRange {
     }
 }
 function autoMeleeAttack(creep, attackables) {
-    const inRange = attackables.map(function (target) {
+    const inRange = attackables.filter(notZeroHits).map(function (target) {
         return new AttackableAndRange(creep, target);
     }).filter(function (target) {
         return target.range <= 1;
@@ -207,13 +233,14 @@ function autoMeleeAttack(creep, attackables) {
         return ERR_NOT_IN_RANGE;
     const target = inRange[0].attackable;
     new Visual().line(creep, target, { color: '#f93842' });
+    registerDamage(target, ATTACK_POWER);
     return creep.attack(target);
 }
 function rangedMassAttackPower(target) {
     return RANGED_ATTACK_POWER * (RANGED_ATTACK_DISTANCE_RATE[target.range] || 0);
 }
 function autoRangedAttack(creep, attackables) {
-    const inRange = attackables.map(function (target) {
+    const inRange = attackables.filter(notZeroHits).map(function (target) {
         return new AttackableAndRange(creep, target);
     }).filter(function (target) {
         return target.range <= 3;
@@ -222,20 +249,24 @@ function autoRangedAttack(creep, attackables) {
         return ERR_NOT_IN_RANGE;
     const totalMassAttackPower = inRange.map(rangedMassAttackPower).reduce((sum, current) => sum + current, 0);
     if (totalMassAttackPower >= RANGED_ATTACK_POWER) {
+        inRange.forEach(x => registerDamage(x.attackable, rangedMassAttackPower(x)));
         return creep.rangedMassAttack();
     }
     else {
         const target = inRange[0].attackable;
+        registerDamage(target, RANGED_ATTACK_POWER);
         return creep.rangedAttack(target);
     }
 }
 function autoSelfHeal(creep) {
-    if (notMaxHits(creep))
+    if (notMaxHits(creep)) {
+        registerHeal(creep, HEAL_POWER);
         return creep.heal(creep);
+    }
     return ERR_NOT_IN_RANGE;
 }
 function autoMeleeHeal(creep, healables) {
-    const inRange = healables.map(function (target) {
+    const inRange = healables.filter(notMaxHits).map(function (target) {
         return new AttackableAndRange(creep, target);
     }).filter(function (target) {
         // voluntary, self heal handled elsewhere
@@ -245,10 +276,11 @@ function autoMeleeHeal(creep, healables) {
         return ERR_NOT_IN_RANGE;
     const target = inRange[0].attackable;
     new Visual().line(creep, target, { color: '#65fd62' });
+    registerHeal(target, HEAL_POWER);
     return creep.heal(target);
 }
 function autoRangedHeal(creep, healables) {
-    const inRange = healables.map(function (target) {
+    const inRange = healables.filter(notMaxHits).map(function (target) {
         return new AttackableAndRange(creep, target);
     }).filter(function (target) {
         // mandatory, ranged does not work on self
@@ -257,6 +289,7 @@ function autoRangedHeal(creep, healables) {
     if (inRange.length === 0)
         return ERR_NOT_IN_RANGE;
     const target = inRange[0].attackable;
+    registerHeal(target, RANGED_HEAL_POWER);
     return creep.rangedHeal(target);
 }
 function autoAll(creep, attackables, healables) {
@@ -351,7 +384,6 @@ function autoAll(creep, attackables, healables) {
     autoMeleeAttack(creep, attackables);
 }
 function autoCombat() {
-    myPlayerInfo.towers.filter(operational).forEach(operateTower);
     // attacking towers is possible, but not practical
     // const enemyCreeps = enemyPlayerInfo.creeps.filter(operational)
     // const enemyTowers = enemyPlayerInfo.towers.filter(operational)
@@ -367,6 +399,8 @@ function autoCombat() {
     myCreeps.forEach(function (creep) {
         autoAll(creep, enemyAttackables, myHealableCreeps);
     });
+    // towers operate after since they have better range and can be more tactical
+    myPlayerInfo.towers.filter(operational).forEach(operateTower);
 }
 class CreepLine {
     // head at index 0
