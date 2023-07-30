@@ -859,7 +859,7 @@ class BodyPartGoal implements Goal {
   private static advanceOneGroup (creeps: Creep[], bodyParts: BodyPart[], options?: MoreFindPathOptions) : CreepMoveResult {
     if (bodyParts.length === 0) return OK
     if (creeps.length === 0) return ERR_NO_BODYPART
-    
+
     const distanceMetricAdapter : CostFunction = function (p1: CostPoint, p2: CostPoint) : number {
       return get8WayGridRange({ x: p1[0], y: p1[0] } as Position, { x: p2[0], y: p2[0] } as Position)
     }
@@ -867,15 +867,15 @@ class BodyPartGoal implements Goal {
     const actorPoints = creeps.map(gameObjectToCostPoint)
 
     const reachablePoints = bodyParts
-    .filter(
-      function (bodyPart: BodyPart) : boolean {
-        return actorPoints.some(
-          function (actorPoint: CostPoint) : boolean {
-            return distanceMetricAdapter(gameObjectToCostPoint(bodyPart), actorPoint) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT
-          }
-        )
-      }
-    ).map(gameObjectToCostPoint)
+      .filter(
+        function (bodyPart: BodyPart) : boolean {
+          return actorPoints.some(
+            function (actorPoint: CostPoint) : boolean {
+              return distanceMetricAdapter(gameObjectToCostPoint(bodyPart), actorPoint) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT
+            }
+          )
+        }
+      ).map(gameObjectToCostPoint)
 
     if (reachablePoints.length === 0) return OK
 
@@ -1277,7 +1277,7 @@ function plan () : void {
 
     rushOrganised.push(doOffence)
     defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]))
-    
+
     for (const goal of line) {
       powerUpActive.addCreep(goal.creep)
     }
