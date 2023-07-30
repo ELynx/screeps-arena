@@ -395,6 +395,9 @@ class CreepLine {
     wagonToLocoIndex(magicNumber, options) {
         return this.creeps.length - 1 - magicNumber;
     }
+    valid() {
+        return this.creeps.some(operational);
+    }
     cost(target, options) {
         for (let i = 0; i < this.creeps.length; ++i) {
             const ri = this.locoToWagonIndex(i, options);
@@ -532,9 +535,10 @@ class CreepPositionGoal {
             return OK;
         return this.creep.moveTo(this.position, options);
     }
+    valid() {
+        return operational(this.creep);
+    }
     cost(options) {
-        if (!operational(this.creep))
-            return Number.MAX_SAFE_INTEGER;
         return get8WayGridRange(this.creep, this.position);
     }
 }
@@ -606,6 +610,9 @@ class LinePositionGoal {
     }
     advance(options) {
         return this.creepLine.moveTo(this.position, options);
+    }
+    valid() {
+        return this.creepLine.valid();
     }
     cost(options) {
         return this.creepLine.cost(this.position, options);
@@ -718,36 +725,50 @@ class BodyPartGoal {
         }
         return result;
     }
+    valid() {
+        return this.creeps.some(operational);
+    }
     cost(options) {
         // too fractal to calculate
         return MAP_SIDE_SIZE / 2;
     }
 }
-class AndGoal {
+class OneOrMoreGoal {
     constructor(goals) {
         this.goals = goals;
     }
     advance(options) {
         if (this.goals.length === 0)
             return ERR_INVALID_ARGS;
+        let hasValid = false;
         let resultRc = OK;
         for (const goal of this.goals) {
+            if (!goal.valid())
+                continue;
+            hasValid = true;
             const rc = goal.advance(options);
             if (rc < resultRc)
-                resultRc = rc; // ERR_ are negative
+                resultRc = rc;
         }
-        return resultRc;
+        return hasValid ? resultRc : ERR_NO_BODYPART;
+    }
+    valid() {
+        return this.goals.some(x => x.valid());
     }
     cost(options) {
         if (this.goals.length === 0)
             return Number.MAX_SAFE_INTEGER;
+        let hasValid = false;
         let maxCost = Number.MIN_SAFE_INTEGER;
         for (const goal of this.goals) {
+            if (!goal.valid())
+                continue;
+            hasValid = true;
             const cost = goal.cost(options);
             if (cost > maxCost)
                 maxCost = cost;
         }
-        return maxCost;
+        return hasValid ? maxCost : Number.MAX_SAFE_INTEGER;
     }
 }
 class OrGoal {
@@ -757,24 +778,32 @@ class OrGoal {
     advance(options) {
         if (this.goals.length === 0)
             return ERR_INVALID_ARGS;
-        let minCost = Number.MAX_SAFE_INTEGER; // also filter out other MAX_...
         let minIndex = -1;
+        let minCost = Number.MAX_SAFE_INTEGER;
         for (let i = 0; i < this.goals.length; ++i) {
-            const goalCost = this.goals[i].cost(options);
+            const goal = this.goals[i];
+            if (!goal.valid())
+                continue;
+            const goalCost = goal.cost(options);
             if (goalCost < minCost) {
-                minCost = goalCost;
                 minIndex = i;
+                minCost = goalCost;
             }
         }
         if (minIndex < 0)
             return ERR_NO_BODYPART;
         return this.goals[minIndex].advance(options);
     }
+    valid() {
+        return this.goals.some(x => x.valid());
+    }
     cost(options) {
         if (this.goals.length === 0)
             return Number.MAX_SAFE_INTEGER;
         let minCost = Number.MAX_SAFE_INTEGER;
         for (const goal of this.goals) {
+            if (!goal.valid())
+                continue;
             const cost = goal.cost(options);
             if (cost < minCost)
                 minCost = cost;
@@ -1009,7 +1038,7 @@ function plan() {
     const lines = [line1, line2, line3, line4, line5];
     const powerUpActive = new BodyPartGoal();
     for (const line of lines) {
-        const doDefence = new AndGoal(line);
+        const doDefence = new OneOrMoreGoal(line);
         const doOffence = LinePositionGoal.of(line.map(function (goal) {
             return goal.creep;
         }), enemyFlag);
