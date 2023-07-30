@@ -214,9 +214,9 @@ function operateTower (tower: StructureTower) : void {
     .filter(
       function (target: StructureTowerScore) : boolean {
         if (target.creep.my) {
-          return target.range <= TOWER_OPTIMAL_RANGE * 1
+          return target.range <= TOWER_OPTIMAL_RANGE * 2
         } else {
-          return target.range <= TOWER_OPTIMAL_RANGE * 3
+          return target.range <= TOWER_OPTIMAL_RANGE * 2
         }
       }
     )
