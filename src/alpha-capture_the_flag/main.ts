@@ -797,20 +797,20 @@ class BodyPartGoal implements Goal {
     this.creeps = this.creeps.filter(operational)
     if (this.creeps.length === 0) return ERR_NO_BODYPART
 
-    const hasExtraMove = function (creep: Creep) : boolean {
+    const notEnoughMove = function (creep: Creep) : boolean {
       let balance = 0
       for (const bodyPart of creep.body) {
         if (bodyPart.type === MOVE) ++balance
         else --balance
       }
 
-      return balance > 0
+      return balance < 0
     }
 
-    const creepsWithExtraMove = this.creeps.filter(hasExtraMove)
+    const creepsWithNotEnoughMove = this.creeps.filter(notEnoughMove)
 
-    const creepsWithExtraMoveAndBodyPart = function (type: string) : Creep[] {
-      return creepsWithExtraMove.filter(
+    const creepsWithBodyPart = function (type: string) : Creep[] {
+      return this.creeps.filter(
         function (creep: Creep) : boolean {
           return creep.body.some(
             function (bodyPart: BodyPartType) : boolean {
@@ -818,43 +818,49 @@ class BodyPartGoal implements Goal {
             }
           )
         }
-      )
+      ),
+      this
     }
 
     const goals : Map<string, CreepPositionGoal> = new Map()
-    const addToGoals = function (goal: CreepPositionGoal) : void {
+
+    const addToGoalsPerCreep = function (goal: CreepPositionGoal) : void {
+      goals.set(goal.creep.id.toLocaleString(), goal)
+    }
+
+    const addToGoalsPerTarget = function (goal: CreepPositionGoal) : void {
       goals.set(goal.creep.id.toLocaleString(), goal)
     }
 
     BodyPartGoal.goalsForGroup(
-      creepsWithExtraMove,
-      bodyPartsOfType(TOUGH),
-      options
-    ).forEach(addToGoals)
+      this.creeps,
+      bodyPartsOfType(TOUGH)
+    ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
       this.creeps,
-      bodyPartsOfType(MOVE),
-      options
-      ).forEach(addToGoals)
+      bodyPartsOfType(MOVE)
+      ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
-      creepsWithExtraMoveAndBodyPart(ATTACK),
-      bodyPartsOfType(ATTACK),
-      options
-      ).forEach(addToGoals)
+      creepsWithBodyPart(ATTACK),
+      bodyPartsOfType(ATTACK)
+      ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
-      creepsWithExtraMoveAndBodyPart(RANGED_ATTACK),
-      bodyPartsOfType(RANGED_ATTACK),
-      options
-      ).forEach(addToGoals)
+      creepsWithBodyPart(RANGED_ATTACK),
+      bodyPartsOfType(RANGED_ATTACK)
+      ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
-      creepsWithExtraMoveAndBodyPart(HEAL),
-      bodyPartsOfType(HEAL),
-      options
-      ).forEach(addToGoals)
+      creepsWithBodyPart(HEAL),
+      bodyPartsOfType(HEAL)
+      ).forEach(addToGoalsPerCreep)
+
+    BodyPartGoal.goalsForGroup(
+      creepsWithNotEnoughMove,
+      bodyPartsOfType(MOVE)
+    ).forEach(addToGoalsPerTarget)
 
     let totalRc : CreepMoveResult = OK
     for (const goal of goals.values()) {
@@ -865,7 +871,7 @@ class BodyPartGoal implements Goal {
     return totalRc
   }
 
-  private static goalsForGroup (creeps: Creep[], bodyParts: BodyPart[], options?: MoreFindPathOptions) : CreepPositionGoal[] {
+  private static goalsForGroup (creeps: Creep[], bodyParts: BodyPart[]) : CreepPositionGoal[] {
     if (bodyParts.length === 0) return []
     if (creeps.length === 0) return []
 
