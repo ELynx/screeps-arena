@@ -152,7 +152,8 @@ function notMaxHits (creep: Creep) : boolean {
 
 function notZeroHits (attackable: Attackable) : boolean {
   const registered = _hitsCache.get(attackable.id.toLocaleString()) || 0
-  return (attackable.hits + registered) > -HEAL_POWER // TODO adjust for actual healing
+  // overkill by double HP
+  return registered + (attackable.hits || 0) + (attackable.hitsMax || 0) > 0
 }
 
 function atSamePosition (a: Position, b: Position) : boolean {
