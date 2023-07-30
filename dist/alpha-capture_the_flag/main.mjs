@@ -633,7 +633,7 @@ class BodyPartGoal {
         this.creeps = this.creeps.filter(operational);
         if (this.creeps.length === 0)
             return ERR_NO_BODYPART;
-        const hasExtraMove = function (creep) {
+        const notEnoughMove = function (creep) {
             let balance = 0;
             for (const bodyPart of creep.body) {
                 if (bodyPart.type === MOVE)
@@ -641,30 +641,52 @@ class BodyPartGoal {
                 else
                     --balance;
             }
-            return balance > 0;
+            return balance < 0;
         };
-        const creepsWithExtraMove = this.creeps.filter(hasExtraMove);
-        const creepsWithExtraMoveAndBodyPart = function (type) {
-            return creepsWithExtraMove.filter(function (creep) {
+        const allCreeps = this.creeps;
+        const creepsWithNotEnoughMove = allCreeps.filter(notEnoughMove);
+        const creepsWithBodyPart = function (type) {
+            return allCreeps.filter(function (creep) {
                 return creep.body.some(function (bodyPart) {
                     return bodyPart.type === type;
                 });
             });
         };
-        // 1st so following can override
-        const rcTough = BodyPartGoal.advanceOneGroup(creepsWithExtraMove, bodyPartsOfType(TOUGH), options);
-        // everyone want MOVE
-        const rcMove = BodyPartGoal.advanceOneGroup(this.creeps, bodyPartsOfType(MOVE), options);
-        const rcAttack = BodyPartGoal.advanceOneGroup(creepsWithExtraMoveAndBodyPart(ATTACK), bodyPartsOfType(ATTACK), options);
-        const rcRangedAttack = BodyPartGoal.advanceOneGroup(creepsWithExtraMoveAndBodyPart(RANGED_ATTACK), bodyPartsOfType(RANGED_ATTACK), options);
-        const rcHeal = BodyPartGoal.advanceOneGroup(creepsWithExtraMoveAndBodyPart(HEAL), bodyPartsOfType(HEAL), options);
-        return Math.min(rcTough, rcMove, rcAttack, rcRangedAttack, rcHeal);
+        const goals = new Map();
+        const addToGoalsPerCreep = function (goal) {
+            goals.set(goal.creep.id.toLocaleString(), goal);
+        };
+        const addToGoalsPerTarget = function (inGoal) {
+            const ids = [];
+            for (const goal of goals.values()) {
+                if (atSamePosition(inGoal.position, goal.position)) {
+                    ids.push(goal.creep.id.toLocaleString());
+                }
+            }
+            for (const id of ids) {
+                goals.delete(id);
+            }
+            goals.set(inGoal.creep.id.toLocaleString(), inGoal);
+        };
+        BodyPartGoal.goalsForGroup(allCreeps, bodyPartsOfType(TOUGH)).forEach(addToGoalsPerCreep);
+        BodyPartGoal.goalsForGroup(allCreeps, bodyPartsOfType(MOVE)).forEach(addToGoalsPerCreep);
+        BodyPartGoal.goalsForGroup(creepsWithBodyPart(ATTACK), bodyPartsOfType(ATTACK)).forEach(addToGoalsPerCreep);
+        BodyPartGoal.goalsForGroup(creepsWithBodyPart(RANGED_ATTACK), bodyPartsOfType(RANGED_ATTACK)).forEach(addToGoalsPerCreep);
+        BodyPartGoal.goalsForGroup(creepsWithBodyPart(HEAL), bodyPartsOfType(HEAL)).forEach(addToGoalsPerCreep);
+        BodyPartGoal.goalsForGroup(creepsWithNotEnoughMove, bodyPartsOfType(MOVE)).forEach(addToGoalsPerTarget);
+        let totalRc = OK;
+        for (const goal of goals.values()) {
+            const rc = goal.advance(options);
+            if (rc < totalRc)
+                totalRc = rc;
+        }
+        return totalRc;
     }
-    static advanceOneGroup(creeps, bodyParts, options) {
+    static goalsForGroup(creeps, bodyParts) {
         if (bodyParts.length === 0)
-            return OK;
+            return [];
         if (creeps.length === 0)
-            return ERR_NO_BODYPART;
+            return [];
         const distanceMetricAdapter = function (p1, p2) {
             return get8WayGridRange({ x: p1[0], y: p1[0] }, { x: p2[0], y: p2[0] });
         };
@@ -676,7 +698,7 @@ class BodyPartGoal {
             });
         }).map(gameObjectToCostPoint);
         if (reachablePoints.length === 0)
-            return OK;
+            return [];
         let targetPoints = [];
         while (targetPoints.length < actorPoints.length) {
             targetPoints = targetPoints.concat(reachablePoints);
@@ -686,18 +708,16 @@ class BodyPartGoal {
             assignTo: actorPoints,
             distanceMetric: distanceMetricAdapter
         });
-        let totalRc = OK;
+        const result = [];
         for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
             const creep = creeps[actorIndex];
             const targetIndex = assignments[actorIndex];
             const targetPoint = targetPoints[targetIndex];
             const target = { x: targetPoint[0], y: targetPoint[1] };
             const goal = new CreepPositionGoal(creep, target);
-            const rc = goal.advance(options);
-            if (rc < totalRc)
-                totalRc = rc;
+            result.push(goal);
         }
-        return totalRc;
+        return result;
     }
     cost(options) {
         // too fractal to calculate
