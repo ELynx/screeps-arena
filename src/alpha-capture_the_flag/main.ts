@@ -886,7 +886,7 @@ class BodyPartGoal implements Goal {
     }
 
     const actors : CostPoint[] = []
-    for (let i = 0; i < creeps.length; ++ i) {
+    for (let i = 0; i < creeps.length; ++i) {
       const creep = creeps[i]
       actors.push([creep.x, creep.y, -creep.fatigue])
     }
@@ -918,7 +918,7 @@ class BodyPartGoal implements Goal {
     })
 
     const result : CreepPositionGoal[] = []
-  
+
     for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
       const targetIndex = assignments[actorIndex]
 
