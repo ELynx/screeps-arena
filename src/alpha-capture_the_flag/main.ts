@@ -816,8 +816,7 @@ class BodyPartGoal implements Goal {
               return bodyPart.type === type
             }
           )
-        },
-        this
+        }
       )
     }
 
