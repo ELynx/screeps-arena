@@ -155,8 +155,8 @@ function towerPower (fullAmount: number, range: number) : number {
 function creepHurtCost (creep: Creep) : number {
   let total = 0
   for (const bodyPart of creep.body) {
-    let cost = BODYPART_COST[bodyPart.type] || 0
-    let partHurt = 1 - bodyPart.hits / BODYPART_HITS
+    const cost = BODYPART_COST[bodyPart.type] || 0
+    const partHurt = 1 - bodyPart.hits / BODYPART_HITS
 
     total += cost * partHurt
   }
@@ -166,8 +166,8 @@ function creepHurtCost (creep: Creep) : number {
 function creepActiveCost (creep: Creep) : number {
   let total = 0
   for (const bodyPart of creep.body) {
-    let cost = BODYPART_COST[bodyPart.type] || 0
-    let partActive = bodyPart.hits / BODYPART_HITS
+    const cost = BODYPART_COST[bodyPart.type] || 0
+    const partActive = bodyPart.hits / BODYPART_HITS
 
     total += cost * partActive
   }
