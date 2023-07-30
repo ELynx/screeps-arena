@@ -671,7 +671,7 @@ class CreepPositionGoal implements Goal {
     return this.creep.moveTo(this.position, options)
   }
 
-  valid(): boolean {
+  valid (): boolean {
     return operational(this.creep)
   }
 
@@ -770,7 +770,7 @@ class LinePositionGoal implements Goal {
     return this.creepLine.moveTo(this.position, options)
   }
 
-  valid(): boolean {
+  valid (): boolean {
     return this.creepLine.valid()
   }
 
@@ -936,7 +936,7 @@ class BodyPartGoal implements Goal {
     return result
   }
 
-  valid(): boolean {
+  valid (): boolean {
     return this.creeps.some(operational)
   }
 
@@ -971,7 +971,7 @@ class OneOrMoreGoal implements Goal {
     return hasValid ? resultRc : ERR_NO_BODYPART
   }
 
-  valid(): boolean {
+  valid (): boolean {
     return this.goals.some(x => x.valid())
   }
 
@@ -1023,7 +1023,7 @@ class OrGoal implements Goal {
     return this.goals[minIndex].advance(options)
   }
 
-  valid(): boolean {
+  valid (): boolean {
     return this.goals.some(x => x.valid())
   }
 
