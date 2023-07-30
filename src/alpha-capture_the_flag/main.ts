@@ -1,7 +1,7 @@
 import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
 
 import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower, CreepRangedMassAttackResult } from 'game/prototypes'
-import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH, BODYPART_COST } from 'game/constants'
+import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH, BODYPART_COST, BODYPART_HITS } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
@@ -152,12 +152,26 @@ function towerPower (fullAmount: number, range: number) : number {
   return Math.floor(effectiveAmount)
 }
 
-function creepCost (creep: Creep) : number {
-  return creep.body.map(
-    function (bodyPart: BodyPartType) : number {
-      return BODYPART_COST[bodyPart.type] || 0
-    }
-  ).reduce((sum, current) => sum + current, 0)
+function creepHurtCost (creep: Creep) : number {
+  let total = 0
+  for (const bodyPart of creep.body) {
+    let cost = BODYPART_COST[bodyPart.type] || 0
+    let partHurt = 1 - bodyPart.hits / BODYPART_HITS
+
+    total += cost * partHurt
+  }
+  return total
+}
+
+function creepActiveCost (creep: Creep) : number {
+  let total = 0
+  for (const bodyPart of creep.body) {
+    let cost = BODYPART_COST[bodyPart.type] || 0
+    let partActive = bodyPart.hits / BODYPART_HITS
+
+    total += cost * partActive
+  }
+  return total
 }
 
 class StructureTowerScore {
@@ -173,17 +187,9 @@ class StructureTowerScore {
 
   private calculateScore () : number {
     if (this.range > TOWER_RANGE) return 0
-    const scoreAtOptimal = this.creep.my ? this.calculateScoreMy() : this.calculateScoreEnemy()
+    const scoreAtOptimal = this.creep.my ? creepHurtCost(this.creep) : creepActiveCost(this.creep)
     const withFalloff = towerPower(scoreAtOptimal, this.range)
     return Math.round(withFalloff)
-  }
-
-  private calculateScoreMy () : number {
-    return creepCost(this.creep)
-  }
-
-  private calculateScoreEnemy () : number {
-    return creepCost(this.creep)
   }
 }
 
@@ -448,14 +454,14 @@ function autoCombat () {
   // attack only enemy creeps
   const enemyAttackables = enemyPlayerInfo.creeps.filter(operational).sort(
     function (a: Creep, b: Creep) : number {
-      return creepCost(b) - creepCost(a)
+      return creepActiveCost(b) - creepActiveCost(a)
     }
   )
 
   const myCreeps = myPlayerInfo.creeps.filter(operational)
   const myHealableCreeps = myCreeps.filter(notMaxHits).sort(
     function (a: Creep, b: Creep) : number {
-      return creepCost(b) - creepCost(a)
+      return creepHurtCost(b) - creepHurtCost(a)
     }
   )
 
