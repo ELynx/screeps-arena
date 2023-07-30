@@ -101,6 +101,8 @@ export function loop () : void {
   play()
 }
 
+type Attackable = Structure | Creep
+
 function exists (something?: GameObject) : boolean {
   if (something === undefined) return false
   if (something.exists === false) return false
@@ -268,8 +270,6 @@ function operateTower (tower: StructureTower) : void {
     tower.attack(target)
   }
 }
-
-type Attackable = Structure | Creep
 
 class AttackableAndRange {
   attackable: Attackable
