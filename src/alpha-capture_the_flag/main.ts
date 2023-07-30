@@ -501,6 +501,10 @@ class CreepLine {
     return this.creeps.length - 1 - magicNumber
   }
 
+  valid () {
+    return this.creeps.some(operational)
+  }
+
   cost (target: Position, options?: MoreFindPathOptions) {
     for (let i = 0; i < this.creeps.length; ++i) {
       const ri = this.locoToWagonIndex(i, options)
@@ -644,6 +648,7 @@ class Rotator {
 
 interface Goal {
   advance (options?: MoreFindPathOptions) : CreepMoveResult
+  valid () : boolean
   cost (options?: MoreFindPathOptions) : number
 }
 
@@ -666,8 +671,11 @@ class CreepPositionGoal implements Goal {
     return this.creep.moveTo(this.position, options)
   }
 
+  valid(): boolean {
+    return operational(this.creep)
+  }
+
   cost (options?: MoreFindPathOptions): number {
-    if (!operational(this.creep)) return Number.MAX_SAFE_INTEGER
     return get8WayGridRange(this.creep as Position, this.position)
   }
 }
@@ -760,6 +768,10 @@ class LinePositionGoal implements Goal {
 
   advance (options?: MoreFindPathOptions): CreepMoveResult {
     return this.creepLine.moveTo(this.position, options)
+  }
+
+  valid(): boolean {
+    return this.creepLine.valid()
   }
 
   cost (options?: MoreFindPathOptions): number {
@@ -924,13 +936,17 @@ class BodyPartGoal implements Goal {
     return result
   }
 
+  valid(): boolean {
+    return this.creeps.some(operational)
+  }
+
   cost (options?: MoreFindPathOptions): number {
     // too fractal to calculate
     return MAP_SIDE_SIZE / 2
   }
 }
 
-class AndGoal implements Goal {
+class OneOrMoreGoal implements Goal {
   goals: Goal[]
 
   constructor (goals: Goal[]) {
@@ -940,27 +956,41 @@ class AndGoal implements Goal {
   advance (options?: MoreFindPathOptions): CreepMoveResult {
     if (this.goals.length === 0) return ERR_INVALID_ARGS
 
+    let hasValid = false
     let resultRc : CreepMoveResult = OK
 
     for (const goal of this.goals) {
+      if (!goal.valid()) continue
+
+      hasValid = true
+
       const rc = goal.advance(options)
-      if (rc < resultRc) resultRc = rc // ERR_ are negative
+      if (rc < resultRc) resultRc = rc
     }
 
-    return resultRc
+    return hasValid ? resultRc : ERR_NO_BODYPART
+  }
+
+  valid(): boolean {
+    return this.goals.some(x => x.valid())
   }
 
   cost (options?: MoreFindPathOptions): number {
     if (this.goals.length === 0) return Number.MAX_SAFE_INTEGER
 
+    let hasValid = false
     let maxCost = Number.MIN_SAFE_INTEGER
 
     for (const goal of this.goals) {
+      if (!goal.valid()) continue
+
+      hasValid = true
+
       const cost = goal.cost(options)
       if (cost > maxCost) maxCost = cost
     }
 
-    return maxCost
+    return hasValid ? maxCost : Number.MAX_SAFE_INTEGER
   }
 }
 
@@ -974,19 +1004,27 @@ class OrGoal implements Goal {
   advance (options?: MoreFindPathOptions): CreepMoveResult {
     if (this.goals.length === 0) return ERR_INVALID_ARGS
 
-    let minCost = Number.MAX_SAFE_INTEGER // also filter out other MAX_...
     let minIndex = -1
+    let minCost = Number.MAX_SAFE_INTEGER
 
     for (let i = 0; i < this.goals.length; ++i) {
-      const goalCost = this.goals[i].cost(options)
+      const goal = this.goals[i]
+
+      if (!goal.valid()) continue
+
+      const goalCost = goal.cost(options)
       if (goalCost < minCost) {
-        minCost = goalCost
         minIndex = i
+        minCost = goalCost
       }
     }
 
     if (minIndex < 0) return ERR_NO_BODYPART
     return this.goals[minIndex].advance(options)
+  }
+
+  valid(): boolean {
+    return this.goals.some(x => x.valid())
   }
 
   cost (options?: MoreFindPathOptions): number {
@@ -995,6 +1033,8 @@ class OrGoal implements Goal {
     let minCost = Number.MAX_SAFE_INTEGER
 
     for (const goal of this.goals) {
+      if (!goal.valid()) continue
+
       const cost = goal.cost(options)
       if (cost < minCost) minCost = cost
     }
@@ -1286,7 +1326,7 @@ function plan () : void {
 
   const powerUpActive = new BodyPartGoal()
   for (const line of lines) {
-    const doDefence = new AndGoal(line)
+    const doDefence = new OneOrMoreGoal(line)
     const doOffence = LinePositionGoal.of(line.map(
       function (goal: CreepPositionGoal) : Creep {
         return goal.creep
