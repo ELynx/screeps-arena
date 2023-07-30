@@ -806,10 +806,11 @@ class BodyPartGoal implements Goal {
       return balance < 0
     }
 
-    const creepsWithNotEnoughMove = this.creeps.filter(notEnoughMove)
+    const allCreeps = this.creeps
+    const creepsWithNotEnoughMove = allCreeps.filter(notEnoughMove)
 
     const creepsWithBodyPart = function (type: string) : Creep[] {
-      return this.creeps.filter(
+      return allCreeps.filter(
         function (creep: Creep) : boolean {
           return creep.body.some(
             function (bodyPart: BodyPartType) : boolean {
@@ -841,12 +842,12 @@ class BodyPartGoal implements Goal {
     }
 
     BodyPartGoal.goalsForGroup(
-      this.creeps,
+      allCreeps,
       bodyPartsOfType(TOUGH)
     ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
-      this.creeps,
+      allCreeps,
       bodyPartsOfType(MOVE)
     ).forEach(addToGoalsPerCreep)
 
