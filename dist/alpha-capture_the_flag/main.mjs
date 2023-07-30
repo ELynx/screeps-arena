@@ -1,6 +1,6 @@
 import assignToGrids from './node_modules/grid-assign-js/dist/lap-jv/index.mjs';
 import { StructureTower, Creep } from '/game/prototypes';
-import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, BODYPART_COST, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, TOUGH, ERR_TIRED, ERR_INVALID_ARGS, TOWER_RANGE, ERR_NOT_IN_RANGE, RANGED_ATTACK_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
+import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, BODYPART_COST, BODYPART_HITS, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, TOUGH, ERR_TIRED, ERR_INVALID_ARGS, TOWER_RANGE, ERR_NOT_IN_RANGE, RANGED_ATTACK_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
 import { getTicks, getCpuTime, getObjectsByPrototype, getRange, getDirection } from '/game/utils';
 import { Visual } from '/game/visual';
 import { Flag, BodyPart } from '/arena/season_alpha/capture_the_flag/basic';
@@ -122,10 +122,23 @@ function towerPower(fullAmount, range) {
     const effectiveAmount = fullAmount * (1 - TOWER_FALLOFF * (effectiveRange - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE));
     return Math.floor(effectiveAmount);
 }
-function creepCost(creep) {
-    return creep.body.map(function (bodyPart) {
-        return BODYPART_COST[bodyPart.type] || 0;
-    }).reduce((sum, current) => sum + current, 0);
+function creepHurtCost(creep) {
+    let total = 0;
+    for (const bodyPart of creep.body) {
+        const cost = BODYPART_COST[bodyPart.type] || 0;
+        const partHurt = 1 - bodyPart.hits / BODYPART_HITS;
+        total += cost * partHurt;
+    }
+    return total;
+}
+function creepActiveCost(creep) {
+    let total = 0;
+    for (const bodyPart of creep.body) {
+        const cost = BODYPART_COST[bodyPart.type] || 0;
+        const partActive = bodyPart.hits / BODYPART_HITS;
+        total += cost * partActive;
+    }
+    return total;
 }
 class StructureTowerScore {
     constructor(creep, range) {
@@ -136,15 +149,9 @@ class StructureTowerScore {
     calculateScore() {
         if (this.range > TOWER_RANGE)
             return 0;
-        const scoreAtOptimal = this.creep.my ? this.calculateScoreMy() : this.calculateScoreEnemy();
+        const scoreAtOptimal = this.creep.my ? creepHurtCost(this.creep) : creepActiveCost(this.creep);
         const withFalloff = towerPower(scoreAtOptimal, this.range);
         return Math.round(withFalloff);
-    }
-    calculateScoreMy() {
-        return creepCost(this.creep);
-    }
-    calculateScoreEnemy() {
-        return creepCost(this.creep);
     }
 }
 function operateTower(tower) {
@@ -165,10 +172,10 @@ function operateTower(tower) {
     })
         .filter(function (target) {
         if (target.creep.my) {
-            return target.range <= TOWER_OPTIMAL_RANGE * 3;
+            return target.range <= TOWER_OPTIMAL_RANGE * 1;
         }
         else {
-            return target.range <= TOWER_OPTIMAL_RANGE * 2;
+            return target.range <= TOWER_OPTIMAL_RANGE * 3;
         }
     })
         .sort(function (a, b) {
@@ -351,11 +358,11 @@ function autoCombat() {
     // const enemyAttackables = (enemyCreeps as Attackable[]).concat(enemyTowers as Attackable[])
     // attack only enemy creeps
     const enemyAttackables = enemyPlayerInfo.creeps.filter(operational).sort(function (a, b) {
-        return creepCost(b) - creepCost(a);
+        return creepActiveCost(b) - creepActiveCost(a);
     });
     const myCreeps = myPlayerInfo.creeps.filter(operational);
     const myHealableCreeps = myCreeps.filter(notMaxHits).sort(function (a, b) {
-        return creepCost(b) - creepCost(a);
+        return creepHurtCost(b) - creepHurtCost(a);
     });
     myCreeps.forEach(function (creep) {
         autoAll(creep, enemyAttackables, myHealableCreeps);
