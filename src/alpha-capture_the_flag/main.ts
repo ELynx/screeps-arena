@@ -827,20 +827,6 @@ class BodyPartGoal implements Goal {
       goals.set(goal.creep.id.toLocaleString(), goal)
     }
 
-    const addToGoalsPerTarget = function (inGoal: CreepPositionGoal) : void {
-      const ids : string[] = []
-      for (const goal of goals.values()) {
-        if (atSamePosition(inGoal.position, goal.position)) {
-          ids.push(goal.creep.id.toLocaleString())
-        }
-      }
-      for (const id of ids) {
-        goals.delete(id)
-      }
-
-      goals.set(inGoal.creep.id.toLocaleString(), inGoal)
-    }
-
     BodyPartGoal.goalsForGroup(
       allCreeps,
       bodyPartsOfType(TOUGH)
@@ -869,7 +855,7 @@ class BodyPartGoal implements Goal {
     BodyPartGoal.goalsForGroup(
       creepsWithNotEnoughMove,
       bodyPartsOfType(MOVE)
-    ).forEach(addToGoalsPerTarget)
+    ).forEach(addToGoalsPerCreep)
 
     let totalRc : CreepMoveResult = OK
     for (const goal of goals.values()) {
