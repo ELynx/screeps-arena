@@ -172,10 +172,10 @@ function operateTower(tower) {
     })
         .filter(function (target) {
         if (target.creep.my) {
-            return target.range <= TOWER_OPTIMAL_RANGE * 1;
+            return target.range <= TOWER_OPTIMAL_RANGE * 2;
         }
         else {
-            return target.range <= TOWER_OPTIMAL_RANGE * 3;
+            return target.range <= TOWER_OPTIMAL_RANGE * 2;
         }
     })
         .sort(function (a, b) {
