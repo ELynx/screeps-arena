@@ -849,22 +849,22 @@ class BodyPartGoal implements Goal {
     BodyPartGoal.goalsForGroup(
       this.creeps,
       bodyPartsOfType(MOVE)
-      ).forEach(addToGoalsPerCreep)
+    ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
       creepsWithBodyPart(ATTACK),
       bodyPartsOfType(ATTACK)
-      ).forEach(addToGoalsPerCreep)
+    ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
       creepsWithBodyPart(RANGED_ATTACK),
       bodyPartsOfType(RANGED_ATTACK)
-      ).forEach(addToGoalsPerCreep)
+    ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
       creepsWithBodyPart(HEAL),
       bodyPartsOfType(HEAL)
-      ).forEach(addToGoalsPerCreep)
+    ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
       creepsWithNotEnoughMove,
