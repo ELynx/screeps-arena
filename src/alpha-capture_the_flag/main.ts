@@ -25,6 +25,10 @@ function get8WayGridRange (a: Position, b: Position) : number {
   return Math.min(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
 }
 
+function gameObjectToCostPoint (gameObject: GameObject) : CostPoint {
+  return [gameObject.x, gameObject.y]
+}
+
 function sortById (a: GameObject, b: GameObject) : number {
   return a.id.toString().localeCompare(b.id.toString())
 }
@@ -782,56 +786,118 @@ class BodyPartGoal implements Goal {
     const allBodyPards = getObjectsByPrototype(BodyPart)
     if (allBodyPards.length === 0) return OK
 
-    this.creeps = this.creeps.filter(operational)
-
-    if (this.creeps.length === 0) return ERR_NO_BODYPART
-
-    const actorPoints : CostPoint[] = []
-
-    // only operational left
-    for (const creep of this.creeps) {
-      actorPoints.push([creep.x, creep.y])
+    const bodyPartsOfType = function (type: string) : BodyPart[] {
+      return allBodyPards.filter(
+        function (bodyPart: BodyPart) : boolean {
+          return bodyPart.type === type
+        }
+      )
     }
 
-    const bodyParts = allBodyPards.filter(
+    this.creeps = this.creeps.filter(operational)
+    if (this.creeps.length === 0) return ERR_NO_BODYPART
+
+    const hasExtraMove = function (creep: Creep) : boolean {
+      let balance = 0
+      for (const bodyPart of creep.body) {
+        if (bodyPart.type === MOVE) ++balance
+        else --balance
+      }
+
+      return balance > 0
+    }
+
+    const creepsWithExtraMove = this.creeps.filter(hasExtraMove)
+
+    const creepsWithExtraMoveAndBodyPart = function (type: string) : Creep[] {
+      return creepsWithExtraMove.filter(
+        function (creep: Creep) : boolean {
+          return creep.body.some(
+            function (bodyPart: BodyPartType) : boolean {
+              return bodyPart.type === type
+            }
+          )
+        }
+      )
+    }
+
+    // 1st so following can override
+    const rcTough : CreepMoveResult = BodyPartGoal.advanceOneGroup(
+      creepsWithExtraMove,
+      bodyPartsOfType(TOUGH),
+      options
+    )
+
+    // everyone want MOVE
+    const rcMove : CreepMoveResult = BodyPartGoal.advanceOneGroup(
+      this.creeps,
+      bodyPartsOfType(MOVE),
+      options
+    )
+
+    const rcAttack : CreepMoveResult = BodyPartGoal.advanceOneGroup(
+      creepsWithExtraMoveAndBodyPart(ATTACK),
+      bodyPartsOfType(ATTACK),
+      options
+    )
+
+    const rcRangedAttack : CreepMoveResult = BodyPartGoal.advanceOneGroup(
+      creepsWithExtraMoveAndBodyPart(RANGED_ATTACK),
+      bodyPartsOfType(RANGED_ATTACK),
+      options
+    )
+
+    const rcHeal : CreepMoveResult = BodyPartGoal.advanceOneGroup(
+      creepsWithExtraMoveAndBodyPart(HEAL),
+      bodyPartsOfType(HEAL),
+      options
+    )
+
+    return Math.min(rcTough, rcMove, rcAttack, rcRangedAttack, rcHeal) as CreepMoveResult
+  }
+
+  private static advanceOneGroup (creeps: Creep[], bodyParts: BodyPart[], options?: MoreFindPathOptions) : CreepMoveResult {
+    if (bodyParts.length === 0) return OK
+    if (creeps.length === 0) return ERR_NO_BODYPART
+    
+    const distanceMetricAdapter : CostFunction = function (p1: CostPoint, p2: CostPoint) : number {
+      return get8WayGridRange({ x: p1[0], y: p1[0] } as Position, { x: p2[0], y: p2[0] } as Position)
+    }
+
+    const actorPoints = creeps.map(gameObjectToCostPoint)
+
+    const reachablePoints = bodyParts
+    .filter(
       function (bodyPart: BodyPart) : boolean {
         return actorPoints.some(
-          function (point: CostPoint) : boolean {
-            return get8WayGridRange(bodyPart as Position, { x: point[0], y: point[1] } as Position) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT
+          function (actorPoint: CostPoint) : boolean {
+            return distanceMetricAdapter(gameObjectToCostPoint(bodyPart), actorPoint) <= bodyPart.ticksToDecay - MAP_SIDE_SIZE_SQRT
           }
         )
       }
-    )
+    ).map(gameObjectToCostPoint)
 
-    if (bodyParts.length === 0) return OK
+    if (reachablePoints.length === 0) return OK
 
-    let targetPoints = bodyParts.map(
-      function (bodyPart: BodyPart) : CostPoint {
-        return [bodyPart.x, bodyPart.y]
-      }
-    )
-
+    let targetPoints : CostPoint[] = []
     while (targetPoints.length < actorPoints.length) {
-      targetPoints = targetPoints.concat(targetPoints)
-    }
-
-    const get8WayGridRangeAdapter : CostFunction = function (p1: CostPoint, p2: CostPoint) : number {
-      return get8WayGridRange({ x: p1[0], y: p1[0] } as Position, { x: p2[0], y: p2[0] } as Position)
+      targetPoints = targetPoints.concat(reachablePoints)
     }
 
     const assignments = assignToGrids({
       points: targetPoints,
       assignTo: actorPoints,
-      distanceMetric: get8WayGridRangeAdapter
+      distanceMetric: distanceMetricAdapter
     })
 
     let totalRc : CreepMoveResult = OK
     for (let actorIndex = 0; actorIndex < assignments.length; ++actorIndex) {
+      const creep = creeps[actorIndex]
+
       const targetIndex = assignments[actorIndex]
       const targetPoint = targetPoints[targetIndex]
       const target = { x: targetPoint[0], y: targetPoint[1] } as Position
 
-      const creep = this.creeps[actorIndex]
       const goal = new CreepPositionGoal(creep, target)
       const rc = goal.advance(options)
       if (rc < totalRc) totalRc = rc
