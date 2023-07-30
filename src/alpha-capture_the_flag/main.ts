@@ -803,7 +803,6 @@ class BodyPartGoal implements Goal {
         if (bodyPart.type === MOVE) ++balance
         else --balance
       }
-
       return balance < 0
     }
 
@@ -828,8 +827,18 @@ class BodyPartGoal implements Goal {
       goals.set(goal.creep.id.toLocaleString(), goal)
     }
 
-    const addToGoalsPerTarget = function (goal: CreepPositionGoal) : void {
-      goals.set(goal.creep.id.toLocaleString(), goal)
+    const addToGoalsPerTarget = function (inGoal: CreepPositionGoal) : void {
+      const ids : string[] = []
+      for (const goal of goals.values()) {
+        if (atSamePosition(inGoal.position, goal.position)) {
+          ids.push(goal.creep.id.toLocaleString())
+        }
+      }
+      for (const id of ids) {
+        goals.delete(id)
+      }
+
+      goals.set(inGoal.creep.id.toLocaleString(), inGoal)
     }
 
     BodyPartGoal.goalsForGroup(
