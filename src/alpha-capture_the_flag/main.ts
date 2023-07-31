@@ -465,9 +465,6 @@ function autoCombat () {
       autoAll(creep, enemyAttackables, myHealableCreeps)
     }
   )
-
-  // towers operate after since they have better range and can be more tactical
-  myPlayerInfo.towers.filter(operational).forEach(operateTower)
 }
 
 class CreepLine {
