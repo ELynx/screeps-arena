@@ -971,7 +971,7 @@ class TowerDefenceGoal implements Goal {
     if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(ERR_TIRED)
     if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
   
-    const allCreepsInRange = allCreeps()
+    const inRange = allCreeps()
       .filter(operational)
       .filter(
         function (creep: Creep) : boolean {
@@ -999,11 +999,11 @@ class TowerDefenceGoal implements Goal {
         }
       )
   
-    if (allCreepsInRange.length === 0) return mapTowerRcToGoalRc(ERR_INVALID_TARGET)
+    if (inRange.length === 0) return mapTowerRcToGoalRc(ERR_INVALID_TARGET)
   
-    const power = allCreepsInRange[0].power
-    const target = allCreepsInRange[0].creep
-  
+    const target = inRange[0].creep
+    const power = inRange[0].power
+    
     let rc : TowerHealResult & TowerAttackResult
 
     if (target.my) {
@@ -1035,9 +1035,42 @@ class TowerHealAlonesGoal implements Goal {
 
   advance(options?: FindPathOptions): CreepMoveResult {
     if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(ERR_TIRED)
-    if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
+    // keep one shot in reserve
+    if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < 2 * TOWER_ENERGY_COST) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
 
-    return mapTowerRcToGoalRc(OK)
+    const inRange = allCreeps()
+      .filter(operational)
+      .filter(
+        function (creep: Creep) : boolean {
+          return creep.my ? notMaxHits(creep) : false
+        }
+      )
+      .map(
+        function (creep: Creep) : StructureTowerScore {
+          const range = getRange(this.tower as Position, creep as Position)
+          return new StructureTowerScore(creep, range)
+        }
+      )
+      .filter(
+        function (target: StructureTowerScore) : boolean {
+          return target.range <= TOWER_RANGE
+        }
+      )
+      .sort(
+        function (a: StructureTowerScore, b: StructureTowerScore) : number {
+          return b.score - a.score
+        }
+      )
+  
+    if (inRange.length === 0) return mapTowerRcToGoalRc(ERR_INVALID_TARGET)
+  
+    const target = inRange[0].creep
+    const power = inRange[0].power
+    
+    registerHeal(target, power)
+    const rc = this.tower.heal(target)
+
+    return mapTowerRcToGoalRc(rc)
   }
 
   valid(): boolean {
