@@ -984,12 +984,14 @@ class TowerGoalBase {
     const reserveEnergy = (this.shotReserve + 1) * TOWER_ENERGY_COST
     if (hasEnergy < reserveEnergy) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
 
+    const towerPosition = this.tower as Position
+
     const inRange = allCreeps()
       .filter(operational)
       .filter(this.filterCreep)
       .map(
         function (creep: Creep) : StructureTowerScore {
-          const range = getRange(this.tower as Position, creep as Position)
+          const range = getRange(towerPosition, creep as Position)
           return new StructureTowerScore(creep, range)
         }
       )
