@@ -1,7 +1,7 @@
 import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
 
 import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower, CreepRangedMassAttackResult } from 'game/prototypes'
-import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH, BODYPART_COST, BODYPART_HITS, TOWER_POWER_ATTACK, TOWER_POWER_HEAL, ATTACK_POWER, HEAL_POWER, RANGED_HEAL_POWER } from 'game/constants'
+import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH, BODYPART_COST, BODYPART_HITS, TOWER_POWER_ATTACK, TOWER_POWER_HEAL, ATTACK_POWER, HEAL_POWER, RANGED_HEAL_POWER, TOWER_CAPACITY } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
@@ -223,52 +223,6 @@ class StructureTowerScore {
     if (this.range > TOWER_RANGE) return 0
     const powerAtOptimal = this.creep.my ? TOWER_POWER_HEAL : TOWER_POWER_ATTACK
     return towerPower(powerAtOptimal, this.range)
-  }
-}
-
-function operateTower (tower: StructureTower) : void {
-  if (tower.cooldown > 0) return
-  if ((tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return
-
-  const allCreepsInRange = allCreeps()
-    .filter(operational)
-    .filter(
-      function (creep: Creep) : boolean {
-        return creep.my ? notMaxHits(creep) : notZeroHits(creep)
-      }
-    )
-    .map(
-      function (creep: Creep) : StructureTowerScore {
-        const range = getRange(tower as Position, creep as Position)
-        return new StructureTowerScore(creep, range)
-      }
-    )
-    .filter(
-      function (target: StructureTowerScore) : boolean {
-        if (target.creep.my) {
-          return target.range <= TOWER_OPTIMAL_RANGE * 2
-        } else {
-          return target.range <= TOWER_OPTIMAL_RANGE * 2
-        }
-      }
-    )
-    .sort(
-      function (a: StructureTowerScore, b: StructureTowerScore) : number {
-        return b.score - a.score
-      }
-    )
-
-  if (allCreepsInRange.length === 0) return
-
-  const power = allCreepsInRange[0].power
-  const target = allCreepsInRange[0].creep
-
-  if (target.my) {
-    registerHeal(target, power)
-    tower.heal(target)
-  } else {
-    registerDamage(target, power)
-    tower.attack(target)
   }
 }
 
@@ -994,6 +948,68 @@ class BodyPartGoal implements Goal {
   }
 }
 
+class TowerDefenceGoal implements Goal {
+  tower: StructureTower
+
+  constructor (tower: StructureTower) {
+    this.tower = tower
+  }
+
+  advance(options?: FindPathOptions): CreepMoveResult {
+    if (this.tower.cooldown > 0) return
+    if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return
+  
+    const allCreepsInRange = allCreeps()
+      .filter(operational)
+      .filter(
+        function (creep: Creep) : boolean {
+          return creep.my ? notMaxHits(creep) : notZeroHits(creep)
+        }
+      )
+      .map(
+        function (creep: Creep) : StructureTowerScore {
+          const range = getRange(this.tower as Position, creep as Position)
+          return new StructureTowerScore(creep, range)
+        }
+      )
+      .filter(
+        function (target: StructureTowerScore) : boolean {
+          if (target.creep.my) {
+            return target.range <= TOWER_OPTIMAL_RANGE * 2
+          } else {
+            return target.range <= TOWER_OPTIMAL_RANGE * 2
+          }
+        }
+      )
+      .sort(
+        function (a: StructureTowerScore, b: StructureTowerScore) : number {
+          return b.score - a.score
+        }
+      )
+  
+    if (allCreepsInRange.length === 0) return
+  
+    const power = allCreepsInRange[0].power
+    const target = allCreepsInRange[0].creep
+  
+    if (target.my) {
+      registerHeal(target, power)
+      this.tower.heal(target)
+    } else {
+      registerDamage(target, power)
+      this.tower.attack(target)
+    }
+  }
+
+  valid(): boolean {
+    return operational(this.tower)
+  }
+
+  cost(options?: FindPathOptions): number {
+    return this.tower.store.getFreeCapacity(RESOURCE_ENERGY) || 0
+  }
+}
+
 class OneOrMoreGoal implements Goal {
   goals: Goal[]
 
@@ -1394,6 +1410,18 @@ function plan () : void {
   rushOrganised.push(defenceGoals[13])
   defenceOrRushOrganised.push(defenceGoals[13])
   prepare.push(defenceGoals[13])
+
+  for (const tower of myPlayerInfo.towers) {
+    const towerDefenceGoal = new TowerDefenceGoal(tower)
+
+    rushRandom.push(towerDefenceGoal)
+    rushOrganised.push(towerDefenceGoal)
+    powerUp.push(towerDefenceGoal)
+    defence.push(towerDefenceGoal)
+    defenceOrRushRandom.push(towerDefenceGoal)
+    defenceOrRushOrganised.push(towerDefenceGoal)
+    prepare.push(towerDefenceGoal)
+  }
 
   console.log('Planning complete at ' + getCpuTime())
 }
