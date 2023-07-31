@@ -1,13 +1,13 @@
 import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
 
-import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower, CreepRangedMassAttackResult, TowerHealResult, TowerAttackResult } from 'game/prototypes'
-import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH, BODYPART_COST, BODYPART_HITS, TOWER_POWER_ATTACK, TOWER_POWER_HEAL, ATTACK_POWER, HEAL_POWER, RANGED_HEAL_POWER, TOWER_CAPACITY, ERR_NOT_ENOUGH_ENERGY, ERR_INVALID_TARGET } from 'game/constants'
-import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
-import { Color, LineVisualStyle, Visual } from 'game/visual'
-import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
+import * as P from 'game/prototypes'
+import * as C from 'game/constants'
+import * as U from 'game/utils'
+import * as V from 'game/visual'
+import * as ARENA from 'arena/season_alpha/capture_the_flag/basic'
 
 // custom demands to navigation
-type MoreFindPathOptions = FindPathOptions
+type MoreFindPathOptions = U.FindPathOptions
 
 // assumption, no constant given
 const MAP_SIDE_SIZE : number = 100
@@ -21,34 +21,34 @@ const MAP_SIDE_SIZE_SQRT : number = Math.round(Math.sqrt(MAP_SIDE_SIZE))
  * @param a 1st position
  * @param b 2nd position
  */
-function get8WayGridRange (a: Position, b: Position) : number {
+function get8WayGridRange (a: P.Position, b: P.Position) : number {
   return Math.min(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
 }
 
-function sortById (a: GameObject, b: GameObject) : number {
+function sortById (a: P.GameObject, b: P.GameObject) : number {
   return a.id.toString().localeCompare(b.id.toString())
 }
 
-let _flagCache: Flag[]
-function allFlags () : Flag[] {
+let _flagCache: ARENA.Flag[]
+function allFlags () : ARENA.Flag[] {
   if (_flagCache === undefined) {
-    _flagCache = getObjectsByPrototype(Flag).sort(sortById)
+    _flagCache = U.getObjectsByPrototype(ARENA.Flag).sort(sortById)
   }
   return _flagCache
 }
 
-let _towerCache: StructureTower[]
-function allTowers () : StructureTower[] {
+let _towerCache: P.StructureTower[]
+function allTowers () : P.StructureTower[] {
   if (_towerCache === undefined) {
-    _towerCache = getObjectsByPrototype(StructureTower).sort(sortById)
+    _towerCache = U.getObjectsByPrototype(P.StructureTower).sort(sortById)
   }
   return _towerCache
 }
 
-let _creepCache: Creep[]
-function allCreeps () : Creep[] {
+let _creepCache: P.Creep[]
+function allCreeps () : P.Creep[] {
   if (_creepCache === undefined) {
-    _creepCache = getObjectsByPrototype(Creep).sort(sortById)
+    _creepCache = U.getObjectsByPrototype(P.Creep).sort(sortById)
   }
   return _creepCache
 }
@@ -59,11 +59,11 @@ function clearHitsCache () : void {
 }
 
 class PlayerInfo {
-  towers: StructureTower[] = []
-  creeps: Creep[] = []
+  towers: P.StructureTower[] = []
+  creeps: P.Creep[] = []
 }
 
-type Ownable = Flag | OwnedStructure | Creep
+type Ownable = ARENA.Flag | P.OwnedStructure | P.Creep
 
 function myOwnable (what: Ownable) : boolean {
   return what.my === true
@@ -93,7 +93,7 @@ function collectPlayerInfo () : void {
 export function loop () : void {
   clearHitsCache()
 
-  if (getTicks() === 1) {
+  if (U.getTicks() === 1) {
     collectPlayerInfo()
     plan()
   }
@@ -101,29 +101,29 @@ export function loop () : void {
   play()
 }
 
-type Attackable = Structure | Creep
+type Attackable = P.Structure | P.Creep
 
-function exists (something?: GameObject) : boolean {
+function exists (something?: P.GameObject) : boolean {
   if (something === undefined) return false
   if (something.exists === false) return false
   return true
 }
 
-function operational (something?: Structure | Creep) : boolean {
+function operational (something?: P.Structure | P.Creep) : boolean {
   if (!exists(something)) return false
   if (something!.hits && something!.hits <= 0) return false
   return true
 }
 
-function hasActiveBodyPart (creep: Creep, type: string) : boolean {
+function hasActiveBodyPart (creep: P.Creep, type: string) : boolean {
   return creep.body.some(
-    function (bodyPart: BodyPartType) : boolean {
+    function (bodyPart: P.BodyPartType) : boolean {
       return bodyPart.hits > 0 && bodyPart.type === type
     }
   )
 }
 
-function countActiveBodyParts (creep: Creep) : Map<string, number> {
+function countActiveBodyParts (creep: P.Creep) : Map<string, number> {
   const result : Map<string, number> = new Map()
   for (const bodyPart of creep.body) {
     if (bodyPart.hits > 0) {
@@ -135,7 +135,7 @@ function countActiveBodyParts (creep: Creep) : Map<string, number> {
   return result
 }
 
-function registerHeal (creep: Creep, power: number) : void {
+function registerHeal (creep: P.Creep, power: number) : void {
   const now = _hitsCache.get(creep.id.toLocaleString()) || 0
   _hitsCache.set(creep.id.toLocaleString(), now + power)
 }
@@ -145,7 +145,7 @@ function registerDamage (attackable: Attackable, power: number) {
   _hitsCache.set(attackable.id.toLocaleString(), now - power)
 }
 
-function notMaxHits (creep: Creep) : boolean {
+function notMaxHits (creep: P.Creep) : boolean {
   const registered = _hitsCache.get(creep.id.toLocaleString()) || 0
   return (creep.hits + registered) < creep.hitsMax
 }
@@ -156,44 +156,44 @@ function notZeroHits (attackable: Attackable) : boolean {
   return registered + (attackable.hits || 0) + (attackable.hitsMax || 0) > 0
 }
 
-function atSamePosition (a: Position, b: Position) : boolean {
+function atSamePosition (a: P.Position, b: P.Position) : boolean {
   return a.x === b.x && a.y === b.y
 }
 
-function getDirectionByPosition (from: Position, to: Position) : Direction | undefined {
+function getDirectionByPosition (from: P.Position, to: P.Position) : U.Direction | undefined {
   if (atSamePosition(from, to)) return undefined
 
   const dx = to.x - from.x
   const dy = to.y - from.y
 
-  return getDirection(dx, dy)
+  return U.getDirection(dx, dy)
 }
 
 function towerPower (fullAmount: number, range: number) : number {
-  if (range <= TOWER_OPTIMAL_RANGE) return fullAmount
+  if (range <= C.TOWER_OPTIMAL_RANGE) return fullAmount
 
-  const effectiveRange = Math.min(range, TOWER_FALLOFF_RANGE)
-  const effectiveAmount = fullAmount * (1 - TOWER_FALLOFF * (effectiveRange - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE))
+  const effectiveRange = Math.min(range, C.TOWER_FALLOFF_RANGE)
+  const effectiveAmount = fullAmount * (1 - C.TOWER_FALLOFF * (effectiveRange - C.TOWER_OPTIMAL_RANGE) / (C.TOWER_FALLOFF_RANGE - C.TOWER_OPTIMAL_RANGE))
 
   return Math.floor(effectiveAmount)
 }
 
-function creepHurtCost (creep: Creep) : number {
+function creepHurtCost (creep: P.Creep) : number {
   let total = 0
   for (const bodyPart of creep.body) {
-    const cost = BODYPART_COST[bodyPart.type] || 0
-    const partHurt = 1 - bodyPart.hits / BODYPART_HITS
+    const cost = C.BODYPART_COST[bodyPart.type] || 0
+    const partHurt = 1 - bodyPart.hits / C.BODYPART_HITS
 
     total += cost * partHurt
   }
   return total
 }
 
-function creepActiveCost (creep: Creep) : number {
+function creepActiveCost (creep: P.Creep) : number {
   let total = 0
   for (const bodyPart of creep.body) {
-    const cost = BODYPART_COST[bodyPart.type] || 0
-    const partActive = bodyPart.hits / BODYPART_HITS
+    const cost = C.BODYPART_COST[bodyPart.type] || 0
+    const partActive = bodyPart.hits / C.BODYPART_HITS
 
     total += cost * partActive
   }
@@ -201,12 +201,12 @@ function creepActiveCost (creep: Creep) : number {
 }
 
 class StructureTowerScore {
-  creep: Creep
+  creep: P.Creep
   range: number
   score: number
   power: number
 
-  constructor (creep: Creep, range: number) {
+  constructor (creep: P.Creep, range: number) {
     this.creep = creep
     this.range = range
     this.score = this.calculateScore()
@@ -214,14 +214,14 @@ class StructureTowerScore {
   }
 
   private calculateScore () : number {
-    if (this.range > TOWER_RANGE) return 0
+    if (this.range > C.TOWER_RANGE) return 0
     const scoreAtOptimal = this.creep.my ? creepHurtCost(this.creep) : creepActiveCost(this.creep)
     return towerPower(scoreAtOptimal, this.range)
   }
 
   private calculatePower () : number {
-    if (this.range > TOWER_RANGE) return 0
-    const powerAtOptimal = this.creep.my ? TOWER_POWER_HEAL : TOWER_POWER_ATTACK
+    if (this.range > C.TOWER_RANGE) return 0
+    const powerAtOptimal = this.creep.my ? C.TOWER_POWER_HEAL : C.TOWER_POWER_ATTACK
     return towerPower(powerAtOptimal, this.range)
   }
 }
@@ -230,13 +230,13 @@ class AttackableAndRange {
   attackable: Attackable
   range: number
 
-  constructor (creep: Creep, attackable: Attackable) {
+  constructor (creep: P.Creep, attackable: Attackable) {
     this.attackable = attackable
-    this.range = getRange(creep as Position, attackable as Position)
+    this.range = U.getRange(creep as P.Position, attackable as P.Position)
   }
 }
 
-function autoMeleeAttack (creep: Creep, attackables: Attackable[]) : CreepAttackResult {
+function autoMeleeAttack (creep: P.Creep, attackables: Attackable[]) : P.CreepAttackResult {
   const inRange = attackables.filter(notZeroHits).map(
     function (target: Attackable) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
@@ -247,19 +247,19 @@ function autoMeleeAttack (creep: Creep, attackables: Attackable[]) : CreepAttack
     }
   )
 
-  if (inRange.length === 0) return ERR_NOT_IN_RANGE
+  if (inRange.length === 0) return C.ERR_NOT_IN_RANGE
 
   const target = inRange[0].attackable
-  new Visual().line(creep as Position, target as Position, { color: '#f93842' as Color } as LineVisualStyle)
-  registerDamage(target, ATTACK_POWER)
+  new V.Visual().line(creep as P.Position, target as P.Position, { color: '#f93842' as V.Color } as V.LineVisualStyle)
+  registerDamage(target, C.ATTACK_POWER)
   return creep.attack(target)
 }
 
 function rangedMassAttackPower (target: AttackableAndRange) : number {
-  return RANGED_ATTACK_POWER * (RANGED_ATTACK_DISTANCE_RATE[target.range] || 0)
+  return C.RANGED_ATTACK_POWER * (C.RANGED_ATTACK_DISTANCE_RATE[target.range] || 0)
 }
 
-function autoRangedAttack (creep: Creep, attackables: Attackable[]) : CreepRangedAttackResult | CreepRangedMassAttackResult {
+function autoRangedAttack (creep: P.Creep, attackables: Attackable[]) : P.CreepRangedAttackResult | P.CreepRangedMassAttackResult {
   const inRange = attackables.filter(notZeroHits).map(
     function (target: Attackable) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
@@ -270,32 +270,32 @@ function autoRangedAttack (creep: Creep, attackables: Attackable[]) : CreepRange
     }
   )
 
-  if (inRange.length === 0) return ERR_NOT_IN_RANGE
+  if (inRange.length === 0) return C.ERR_NOT_IN_RANGE
 
   const totalMassAttackPower = inRange.map(rangedMassAttackPower).reduce((sum, current) => sum + current, 0)
 
-  if (totalMassAttackPower >= RANGED_ATTACK_POWER) {
+  if (totalMassAttackPower >= C.RANGED_ATTACK_POWER) {
     inRange.forEach(x => registerDamage(x.attackable, rangedMassAttackPower(x)))
     return creep.rangedMassAttack()
   } else {
     const target = inRange[0].attackable
-    registerDamage(target, RANGED_ATTACK_POWER)
+    registerDamage(target, C.RANGED_ATTACK_POWER)
     return creep.rangedAttack(target)
   }
 }
 
-function autoSelfHeal (creep: Creep) : CreepHealResult {
+function autoSelfHeal (creep: P.Creep) : P.CreepHealResult {
   if (notMaxHits(creep)) {
-    registerHeal(creep, HEAL_POWER)
+    registerHeal(creep, C.HEAL_POWER)
     return creep.heal(creep)
   }
 
-  return ERR_NOT_IN_RANGE
+  return C.ERR_NOT_IN_RANGE
 }
 
-function autoMeleeHeal (creep: Creep, healables: Creep[]) : CreepHealResult {
+function autoMeleeHeal (creep: P.Creep, healables: P.Creep[]) : P.CreepHealResult {
   const inRange = healables.filter(notMaxHits).map(
-    function (target: Creep) : AttackableAndRange {
+    function (target: P.Creep) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
   ).filter(
@@ -305,17 +305,17 @@ function autoMeleeHeal (creep: Creep, healables: Creep[]) : CreepHealResult {
     }
   )
 
-  if (inRange.length === 0) return ERR_NOT_IN_RANGE
+  if (inRange.length === 0) return C.ERR_NOT_IN_RANGE
 
-  const target = inRange[0].attackable as Creep
-  new Visual().line(creep as Position, target as Position, { color: '#65fd62' as Color } as LineVisualStyle)
-  registerHeal(target, HEAL_POWER)
+  const target = inRange[0].attackable as P.Creep
+  new V.Visual().line(creep as P.Position, target as P.Position, { color: '#65fd62' as V.Color } as V.LineVisualStyle)
+  registerHeal(target, C.HEAL_POWER)
   return creep.heal(target)
 }
 
-function autoRangedHeal (creep: Creep, healables: Creep[]) : CreepRangedHealResult {
+function autoRangedHeal (creep: P.Creep, healables: P.Creep[]) : P.CreepRangedHealResult {
   const inRange = healables.filter(notMaxHits).map(
-    function (target: Creep) : AttackableAndRange {
+    function (target: P.Creep) : AttackableAndRange {
       return new AttackableAndRange(creep, target)
     }
   ).filter(
@@ -325,21 +325,21 @@ function autoRangedHeal (creep: Creep, healables: Creep[]) : CreepRangedHealResu
     }
   )
 
-  if (inRange.length === 0) return ERR_NOT_IN_RANGE
+  if (inRange.length === 0) return C.ERR_NOT_IN_RANGE
 
-  const target = inRange[0].attackable as Creep
-  registerHeal(target, RANGED_HEAL_POWER)
+  const target = inRange[0].attackable as P.Creep
+  registerHeal(target, C.RANGED_HEAL_POWER)
   return creep.rangedHeal(target)
 }
 
-function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
+function autoAll (creep: P.Creep, attackables: Attackable[], healables: P.Creep[]) {
   // https://docs.screeps.com/simultaneous-actions.html
   const counts = countActiveBodyParts(creep)
 
-  const tough : number = counts.get(TOUGH) || 0
-  const melee : number = counts.get(ATTACK) || 0
-  const ranged : number = counts.get(RANGED_ATTACK) || 0
-  const heal : number = counts.get(HEAL) || 0
+  const tough : number = counts.get(C.TOUGH) || 0
+  const melee : number = counts.get(C.ATTACK) || 0
+  const ranged : number = counts.get(C.RANGED_ATTACK) || 0
+  const heal : number = counts.get(C.HEAL) || 0
 
   // solve simple cases
 
@@ -356,8 +356,8 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   }
 
   if (melee === 0 && ranged === 0 && heal > 0) {
-    if (autoSelfHeal(creep) === OK) return
-    if (autoMeleeHeal(creep, healables) === OK) return
+    if (autoSelfHeal(creep) === C.OK) return
+    if (autoMeleeHeal(creep, healables) === C.OK) return
     autoRangedHeal(creep, healables)
     return
   }
@@ -371,21 +371,21 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   // solve medium cases
 
   const asHealAsPossible = function () : void {
-    if (autoSelfHeal(creep) === OK) {
+    if (autoSelfHeal(creep) === C.OK) {
       autoRangedAttack(creep, attackables)
       return
     }
 
-    if (autoMeleeHeal(creep, healables) === OK) {
+    if (autoMeleeHeal(creep, healables) === C.OK) {
       autoRangedAttack(creep, attackables)
       return
     }
 
     if (ranged > heal) {
-      if (autoRangedAttack(creep, attackables) === OK) return
+      if (autoRangedAttack(creep, attackables) === C.OK) return
       autoRangedHeal(creep, healables)
     } else {
-      if (autoRangedHeal(creep, healables) === OK) return
+      if (autoRangedHeal(creep, healables) === C.OK) return
       autoRangedAttack(creep, attackables)
     }
   }
@@ -398,7 +398,7 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
   // solve complex cases
 
   const meleeThenHeal = function () : void {
-    if (autoMeleeAttack(creep, attackables) === OK) {
+    if (autoMeleeAttack(creep, attackables) === C.OK) {
       autoRangedAttack(creep, attackables)
       return
     }
@@ -416,25 +416,25 @@ function autoAll (creep: Creep, attackables: Attackable[], healables: Creep[]) {
     return
   }
 
-  if (autoSelfHeal(creep) === OK) {
+  if (autoSelfHeal(creep) === C.OK) {
     autoRangedAttack(creep, attackables)
     return
   }
 
-  if (autoMeleeHeal(creep, healables) === OK) {
+  if (autoMeleeHeal(creep, healables) === C.OK) {
     autoRangedAttack(creep, attackables)
     return
   }
 
   if (heal >= ranged) {
-    if (autoRangedHeal(creep, healables) === OK) return
+    if (autoRangedHeal(creep, healables) === C.OK) return
   }
 
-  if (autoRangedAttack(creep, attackables) === OK) {
+  if (autoRangedAttack(creep, attackables) === C.OK) {
     autoMeleeAttack(creep, attackables)
   }
 
-  if (autoRangedHeal(creep, healables) === OK) return
+  if (autoRangedHeal(creep, healables) === C.OK) return
 
   autoMeleeAttack(creep, attackables)
 }
@@ -447,7 +447,7 @@ function autoCombat () {
 
   // attack only enemy creeps
   const enemyAttackables = enemyPlayerInfo.creeps.filter(operational).sort(
-    function (a: Creep, b: Creep) : number {
+    function (a: P.Creep, b: P.Creep) : number {
       return creepActiveCost(b) - creepActiveCost(a)
     }
   )
@@ -455,7 +455,7 @@ function autoCombat () {
   const myCreeps = myPlayerInfo.creeps.filter(operational)
 
   const myHealableCreeps = myCreeps.filter(notMaxHits).sort(
-    function (a: Creep, b: Creep) : number {
+    function (a: P.Creep, b: P.Creep) : number {
       return creepHurtCost(b) - creepHurtCost(a)
     }
   )
@@ -468,26 +468,26 @@ function autoCombat () {
 }
 
 class CreepLine {
-  creeps: Creep[]
+  creeps: P.Creep[]
 
   // head at index 0
-  constructor (creeps: Creep[]) {
+  constructor (creeps: P.Creep[]) {
     // safeguard against array modifications
     this.creeps = creeps.concat()
   }
 
-  move (direction: Direction, options?: MoreFindPathOptions) : CreepMoveResult {
+  move (direction: U.Direction, options?: MoreFindPathOptions) : P.CreepMoveResult {
     const [rc, loco] = this.chaseLoco(options)
-    if (rc !== OK) return rc
+    if (rc !== C.OK) return rc
 
     return loco!.move(direction)
   }
 
-  moveTo (target: Position, options?: MoreFindPathOptions) {
+  moveTo (target: P.Position, options?: MoreFindPathOptions) {
     const [rc, loco] = this.chaseLoco(options)
-    if (rc !== OK) return rc
+    if (rc !== C.OK) return rc
 
-    if (atSamePosition(loco! as Position, target)) return OK
+    if (atSamePosition(loco! as P.Position, target)) return C.OK
 
     return loco!.moveTo(target, options)
   }
@@ -504,27 +504,27 @@ class CreepLine {
     return this.creeps.some(operational)
   }
 
-  cost (target: Position, options?: MoreFindPathOptions) {
+  cost (target: P.Position, options?: MoreFindPathOptions) {
     for (let i = 0; i < this.creeps.length; ++i) {
       const ri = this.locoToWagonIndex(i, options)
       const loco = this.creeps[ri]
       if (operational(loco)) {
-        return get8WayGridRange(loco as Position, target)
+        return get8WayGridRange(loco as P.Position, target)
       }
     }
 
     return Number.MAX_SAFE_INTEGER
   }
 
-  private chaseLoco (options?: MoreFindPathOptions) : [CreepMoveResult, Creep?] {
+  private chaseLoco (options?: MoreFindPathOptions) : [P.CreepMoveResult, P.Creep?] {
     const state = this.refreshState()
-    if (state !== OK) return [state, undefined]
+    if (state !== C.OK) return [state, undefined]
 
     // all !operational creeps are removed
     // all creeps can move
 
     // simple case
-    if (this.creeps.length === 1) return [OK, this.creeps[0]]
+    if (this.creeps.length === 1) return [C.OK, this.creeps[0]]
 
     for (let i = 0; i < this.creeps.length - 1; ++i) {
       const ri0 = this.wagonToLocoIndex(i, options)
@@ -533,57 +533,57 @@ class CreepLine {
       const current = this.creeps[ri0]
       const next = this.creeps[ri1]
 
-      const range = getRange(current as Position, next as Position)
+      const range = U.getRange(current as P.Position, next as P.Position)
 
       if (range === 1) {
         // just a step
-        const direction = getDirectionByPosition(current as Position, next as Position)
+        const direction = getDirectionByPosition(current as P.Position, next as P.Position)
         current.move(direction!) // because range 1 should work
       } else if (range > 1) {
-        current.moveTo(next as Position, options)
+        current.moveTo(next as P.Position, options)
         // give time to catch up
-        return [ERR_TIRED, undefined]
+        return [C.ERR_TIRED, undefined]
       } else {
         // just to cover the case
-        return [ERR_INVALID_ARGS, undefined]
+        return [C.ERR_INVALID_ARGS, undefined]
       }
     }
 
     // return head for command
     const locoIndex = this.locoToWagonIndex(0, options)
-    return [OK, this.creeps[locoIndex]]
+    return [C.OK, this.creeps[locoIndex]]
   }
 
-  private refreshState () : CreepMoveResult {
+  private refreshState () : P.CreepMoveResult {
     this.creeps = this.creeps.filter(operational)
 
-    if (this.creeps.length === 0) return ERR_NO_BODYPART
+    if (this.creeps.length === 0) return C.ERR_NO_BODYPART
 
     for (const creep of this.creeps) {
-      if (creep.fatigue > 0) return ERR_TIRED
-      if (!hasActiveBodyPart(creep, MOVE)) return ERR_NO_BODYPART
+      if (creep.fatigue > 0) return C.ERR_TIRED
+      if (!hasActiveBodyPart(creep, C.MOVE)) return C.ERR_NO_BODYPART
     }
 
-    return OK
+    return C.OK
   }
 }
 
 class Rotator {
-  protected anchor: Position
-  protected offset: Position
-  protected positions: Position[]
+  protected anchor: P.Position
+  protected offset: P.Position
+  protected positions: P.Position[]
 
-  protected constructor (anchor: Position) {
+  protected constructor (anchor: P.Position) {
     this.anchor = anchor
-    this.offset = { x: 0, y: 0 } as Position
+    this.offset = { x: 0, y: 0 } as P.Position
     this.positions = []
   }
 
-  protected setOffset (offset: Position) {
+  protected setOffset (offset: P.Position) {
     this.offset = offset
   }
 
-  protected with (position: Position) {
+  protected with (position: P.Position) {
     const shifted = { x: position.x + this.offset.x, y: position.y + this.offset.y }
     this.positions.push(shifted)
   }
@@ -646,7 +646,7 @@ class Rotator {
 }
 
 interface Goal {
-  advance (options?: MoreFindPathOptions) : CreepMoveResult
+  advance (options?: MoreFindPathOptions) : P.CreepMoveResult
   valid () : boolean
   cost (options?: MoreFindPathOptions) : number
 }
@@ -656,17 +656,17 @@ function advance (positionGoal: Goal) : void {
 }
 
 class CreepPositionGoal implements Goal {
-  creep: Creep
-  position: Position
+  creep: P.Creep
+  position: P.Position
 
-  constructor (creep: Creep, position: Position) {
+  constructor (creep: P.Creep, position: P.Position) {
     this.creep = creep
     this.position = position
   }
 
-  advance (options?: MoreFindPathOptions): CreepMoveResult {
-    if (!operational(this.creep)) return ERR_NO_BODYPART
-    if (atSamePosition(this.creep as Position, this.position)) return OK
+  advance (options?: MoreFindPathOptions): P.CreepMoveResult {
+    if (!operational(this.creep)) return C.ERR_NO_BODYPART
+    if (atSamePosition(this.creep as P.Position, this.position)) return C.OK
     return this.creep.moveTo(this.position, options)
   }
 
@@ -675,41 +675,41 @@ class CreepPositionGoal implements Goal {
   }
 
   cost (options?: MoreFindPathOptions): number {
-    return get8WayGridRange(this.creep as Position, this.position)
+    return get8WayGridRange(this.creep as P.Position, this.position)
   }
 }
 
 class GridCreepPositionGoalBuilder extends Rotator {
-  creeps: Creep[]
+  creeps: P.Creep[]
 
-  private constructor (anchor: Position) {
+  private constructor (anchor: P.Position) {
     super(anchor)
     this.creeps = []
   }
 
-  static around (position: Position) : GridCreepPositionGoalBuilder {
+  static around (position: P.Position) : GridCreepPositionGoalBuilder {
     return new GridCreepPositionGoalBuilder(position)
   }
 
-  public setOffset (offset: Position): GridCreepPositionGoalBuilder {
+  public setOffset (offset: P.Position): GridCreepPositionGoalBuilder {
     super.setOffset(offset)
     return this
   }
 
   public setOffsetXY (x: number, y: number) : GridCreepPositionGoalBuilder {
-    const position = { x, y } as Position
+    const position = { x, y } as P.Position
     super.setOffset(position)
     return this
   }
 
-  public withCreepToPosition (creep: Creep, position: Position) : GridCreepPositionGoalBuilder {
+  public withCreepToPosition (creep: P.Creep, position: P.Position) : GridCreepPositionGoalBuilder {
     this.creeps.push(creep)
     super.with(position)
     return this
   }
 
-  public withCreepToXY (creep: Creep, x: number, y: number) : GridCreepPositionGoalBuilder {
-    const position = { x, y } as Position
+  public withCreepToXY (creep: P.Creep, x: number, y: number) : GridCreepPositionGoalBuilder {
+    const position = { x, y } as P.Position
     return this.withCreepToPosition(creep, position)
   }
 
@@ -753,19 +753,19 @@ class GridCreepPositionGoalBuilder extends Rotator {
 
 class LinePositionGoal implements Goal {
   creepLine: CreepLine
-  position: Position
+  position: P.Position
 
-  protected constructor (creepLine: CreepLine, position: Position) {
+  protected constructor (creepLine: CreepLine, position: P.Position) {
     this.creepLine = creepLine
     this.position = position
   }
 
-  static of (creeps: Creep[], position: Position) : LinePositionGoal {
+  static of (creeps: P.Creep[], position: P.Position) : LinePositionGoal {
     const creepLine = new CreepLine(creeps)
     return new LinePositionGoal(creepLine, position)
   }
 
-  advance (options?: MoreFindPathOptions): CreepMoveResult {
+  advance (options?: MoreFindPathOptions): P.CreepMoveResult {
     return this.creepLine.moveTo(this.position, options)
   }
 
@@ -779,35 +779,35 @@ class LinePositionGoal implements Goal {
 }
 
 class BodyPartGoal implements Goal {
-  creeps: Creep[]
+  creeps: P.Creep[]
 
   constructor () {
     this.creeps = []
   }
 
-  addCreep (creep: Creep) {
+  addCreep (creep: P.Creep) {
     this.creeps.push(creep)
   }
 
-  advance (options?: MoreFindPathOptions): CreepMoveResult {
-    const allBodyPards = getObjectsByPrototype(BodyPart)
-    if (allBodyPards.length === 0) return OK
+  advance (options?: MoreFindPathOptions): P.CreepMoveResult {
+    const allBodyPards = U.getObjectsByPrototype(ARENA.BodyPart)
+    if (allBodyPards.length === 0) return C.OK
 
-    const bodyPartsOfType = function (type: string) : BodyPart[] {
+    const bodyPartsOfType = function (type: string) : ARENA.BodyPart[] {
       return allBodyPards.filter(
-        function (bodyPart: BodyPart) : boolean {
+        function (bodyPart: ARENA.BodyPart) : boolean {
           return bodyPart.type === type
         }
       )
     }
 
     this.creeps = this.creeps.filter(operational)
-    if (this.creeps.length === 0) return ERR_NO_BODYPART
+    if (this.creeps.length === 0) return C.ERR_NO_BODYPART
 
-    const notEnoughMove = function (creep: Creep) : boolean {
+    const notEnoughMove = function (creep: P.Creep) : boolean {
       let balance = 0
       for (const bodyPart of creep.body) {
-        if (bodyPart.type === MOVE) ++balance
+        if (bodyPart.type === C.MOVE) ++balance
         else --balance
       }
       return balance < 0
@@ -816,11 +816,11 @@ class BodyPartGoal implements Goal {
     const allCreeps = this.creeps
     const creepsWithNotEnoughMove = allCreeps.filter(notEnoughMove)
 
-    const creepsWithBodyPart = function (type: string) : Creep[] {
+    const creepsWithBodyPart = function (type: string) : P.Creep[] {
       return allCreeps.filter(
-        function (creep: Creep) : boolean {
+        function (creep: P.Creep) : boolean {
           return creep.body.some(
-            function (bodyPart: BodyPartType) : boolean {
+            function (bodyPart: P.BodyPartType) : boolean {
               return bodyPart.type === type
             }
           )
@@ -836,35 +836,35 @@ class BodyPartGoal implements Goal {
 
     BodyPartGoal.goalsForGroup(
       allCreeps,
-      bodyPartsOfType(TOUGH)
+      bodyPartsOfType(C.TOUGH)
     ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
       allCreeps,
-      bodyPartsOfType(MOVE)
+      bodyPartsOfType(C.MOVE)
     ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
-      creepsWithBodyPart(ATTACK),
-      bodyPartsOfType(ATTACK)
+      creepsWithBodyPart(C.ATTACK),
+      bodyPartsOfType(C.ATTACK)
     ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
-      creepsWithBodyPart(RANGED_ATTACK),
-      bodyPartsOfType(RANGED_ATTACK)
+      creepsWithBodyPart(C.RANGED_ATTACK),
+      bodyPartsOfType(C.RANGED_ATTACK)
     ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
-      creepsWithBodyPart(HEAL),
-      bodyPartsOfType(HEAL)
+      creepsWithBodyPart(C.HEAL),
+      bodyPartsOfType(C.HEAL)
     ).forEach(addToGoalsPerCreep)
 
     BodyPartGoal.goalsForGroup(
       creepsWithNotEnoughMove,
-      bodyPartsOfType(MOVE)
+      bodyPartsOfType(C.MOVE)
     ).forEach(addToGoalsPerCreep)
 
-    let totalRc : CreepMoveResult = OK
+    let totalRc : P.CreepMoveResult = C.OK
     for (const goal of goals.values()) {
       const rc = goal.advance(options)
       if (rc < totalRc) totalRc = rc
@@ -873,7 +873,7 @@ class BodyPartGoal implements Goal {
     return totalRc
   }
 
-  private static goalsForGroup (creeps: Creep[], bodyParts: BodyPart[]) : CreepPositionGoal[] {
+  private static goalsForGroup (creeps: P.Creep[], bodyParts: ARENA.BodyPart[]) : CreepPositionGoal[] {
     if (bodyParts.length === 0) return []
     if (creeps.length === 0) return []
 
@@ -928,7 +928,7 @@ class BodyPartGoal implements Goal {
       const creep = creeps[actorIndex]
       const bodyPart = expandedBodyParts[targetIndex]
 
-      const goal = new CreepPositionGoal(creep, bodyPart as Position)
+      const goal = new CreepPositionGoal(creep, bodyPart as P.Position)
       result.push(goal)
     }
 
@@ -945,40 +945,44 @@ class BodyPartGoal implements Goal {
   }
 }
 
-function mapTowerRcToGoalRc (inRc: TowerHealResult & TowerAttackResult) : CreepMoveResult {
-
+function mapTowerRcToGoalRc (inRc: P.TowerHealResult & P.TowerAttackResult) : P.CreepMoveResult {
+  switch (inRc) {
+    case C.OK:
+    case C.ERR_NOT_OWNER:
+      return inRc
+  }
 }
 
 class TowerDefenceGoal implements Goal {
-  tower: StructureTower
+  tower: P.StructureTower
 
-  constructor (tower: StructureTower) {
+  constructor (tower: P.StructureTower) {
     this.tower = tower
   }
 
-  advance(options?: FindPathOptions): CreepMoveResult {
-    if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(ERR_TIRED)
-    if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
+  advance(options?: U.FindPathOptions): P.CreepMoveResult {
+    if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(C.ERR_TIRED)
+    if ((this.tower.store.getUsedCapacity(C.RESOURCE_ENERGY) || 0) < C.TOWER_ENERGY_COST) return mapTowerRcToGoalRc(C.ERR_NOT_ENOUGH_ENERGY)
   
     const allCreepsInRange = allCreeps()
       .filter(operational)
       .filter(
-        function (creep: Creep) : boolean {
+        function (creep: P.Creep) : boolean {
           return creep.my ? notMaxHits(creep) : notZeroHits(creep)
         }
       )
       .map(
-        function (creep: Creep) : StructureTowerScore {
-          const range = getRange(this.tower as Position, creep as Position)
+        function (creep: P.Creep) : StructureTowerScore {
+          const range = U.getRange(this.tower as P.Position, creep as P.Position)
           return new StructureTowerScore(creep, range)
         }
       )
       .filter(
         function (target: StructureTowerScore) : boolean {
           if (target.creep.my) {
-            return target.range <= TOWER_OPTIMAL_RANGE * 2
+            return target.range <= C.TOWER_OPTIMAL_RANGE * 2
           } else {
-            return target.range <= TOWER_OPTIMAL_RANGE * 2
+            return target.range <= C.TOWER_OPTIMAL_RANGE * 2
           }
         }
       )
@@ -988,12 +992,12 @@ class TowerDefenceGoal implements Goal {
         }
       )
   
-    if (allCreepsInRange.length === 0) return mapTowerRcToGoalRc(ERR_INVALID_TARGET)
+    if (allCreepsInRange.length === 0) return mapTowerRcToGoalRc(C.ERR_INVALID_TARGET)
   
     const power = allCreepsInRange[0].power
     const target = allCreepsInRange[0].creep
   
-    let rc : TowerHealResult & TowerAttackResult
+    let rc : P.TowerHealResult & P.TowerAttackResult
 
     if (target.my) {
       registerHeal(target, power)
@@ -1010,31 +1014,31 @@ class TowerDefenceGoal implements Goal {
     return operational(this.tower)
   }
 
-  cost(options?: FindPathOptions): number {
-    return this.tower.store.getFreeCapacity(RESOURCE_ENERGY) || 0
+  cost(options?: U.FindPathOptions): number {
+    return this.tower.store.getFreeCapacity(C.RESOURCE_ENERGY) || 0
   }
 }
 
 class TowerHealAlonesGoal implements Goal {
-  tower: StructureTower
+  tower: P.StructureTower
 
-  constructor (tower: StructureTower) {
+  constructor (tower: P.StructureTower) {
     this.tower = tower
   }
 
-  advance(options?: FindPathOptions): CreepMoveResult {
-    if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(ERR_TIRED)
-    if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
+  advance(options?: U.FindPathOptions): P.CreepMoveResult {
+    if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(C.ERR_TIRED)
+    if ((this.tower.store.getUsedCapacity(C.RESOURCE_ENERGY) || 0) < C.TOWER_ENERGY_COST) return mapTowerRcToGoalRc(C.ERR_NOT_ENOUGH_ENERGY)
 
-    return mapTowerRcToGoalRc(OK)
+    return mapTowerRcToGoalRc(C.OK)
   }
 
   valid(): boolean {
     return operational(this.tower)
   }
 
-  cost(options?: FindPathOptions): number {
-    return this.tower.store.getFreeCapacity(RESOURCE_ENERGY) || 0
+  cost(options?: U.FindPathOptions): number {
+    return this.tower.store.getFreeCapacity(C.RESOURCE_ENERGY) || 0
   }
 }
 
@@ -1045,11 +1049,11 @@ class OneOrMoreGoal implements Goal {
     this.goals = goals
   }
 
-  advance (options?: MoreFindPathOptions): CreepMoveResult {
-    if (this.goals.length === 0) return ERR_INVALID_ARGS
+  advance (options?: MoreFindPathOptions): P.CreepMoveResult {
+    if (this.goals.length === 0) return C.ERR_INVALID_ARGS
 
     let hasValid = false
-    let resultRc : CreepMoveResult = OK
+    let resultRc : P.CreepMoveResult = C.OK
 
     for (const goal of this.goals) {
       if (!goal.valid()) continue
@@ -1060,7 +1064,7 @@ class OneOrMoreGoal implements Goal {
       if (rc < resultRc) resultRc = rc
     }
 
-    return hasValid ? resultRc : ERR_NO_BODYPART
+    return hasValid ? resultRc : C.ERR_NO_BODYPART
   }
 
   valid (): boolean {
@@ -1093,8 +1097,8 @@ class OrGoal implements Goal {
     this.goals = goals
   }
 
-  advance (options?: MoreFindPathOptions): CreepMoveResult {
-    if (this.goals.length === 0) return ERR_INVALID_ARGS
+  advance (options?: MoreFindPathOptions): P.CreepMoveResult {
+    if (this.goals.length === 0) return C.ERR_INVALID_ARGS
 
     let minIndex = -1
     let minCost = Number.MAX_SAFE_INTEGER
@@ -1111,7 +1115,7 @@ class OrGoal implements Goal {
       }
     }
 
-    if (minIndex < 0) return ERR_NO_BODYPART
+    if (minIndex < 0) return C.ERR_NO_BODYPART
     return this.goals[minIndex].advance(options)
   }
 
@@ -1137,27 +1141,27 @@ class OrGoal implements Goal {
 
 class CreepFilter {
   bodyTypes: string[]
-  positions: Position[]
+  positions: P.Position[]
 
-  constructor (bodyTypes: string[], positions: Position[]) {
+  constructor (bodyTypes: string[], positions: P.Position[]) {
     this.bodyTypes = bodyTypes
     this.positions = positions
   }
 
   // returns [found creeps in specified order, remainder]
   // uses all or nothing approach, if one requested is not found, all are dropped
-  filter (creeps: Creep[]) : [Creep[], Creep[]] {
+  filter (creeps: P.Creep[]) : [P.Creep[], P.Creep[]] {
     if (this.positions.length !== this.bodyTypes.length) return [[], creeps]
 
-    const found : Creep[] = new Array(this.positions.length)
-    const remainder : Creep[] = []
+    const found : P.Creep[] = new Array(this.positions.length)
+    const remainder : P.Creep[] = []
 
     for (const creep of creeps) {
       let positionNotFound = true
 
       for (let i = 0; i < this.positions.length && positionNotFound; ++i) {
         const position = this.positions[i]
-        if (atSamePosition(creep as Position, position)) {
+        if (atSamePosition(creep as P.Position, position)) {
           if (hasActiveBodyPart(creep, this.bodyTypes[i])) {
             found[i] = creep
             positionNotFound = false
@@ -1181,33 +1185,33 @@ class CreepFilter {
 class CreepFilterBuilder extends Rotator {
   bodyTypes: string[]
 
-  private constructor (anchor: Position) {
+  private constructor (anchor: P.Position) {
     super(anchor)
     this.bodyTypes = []
   }
 
-  static around (position: Position) : CreepFilterBuilder {
+  static around (position: P.Position) : CreepFilterBuilder {
     return new CreepFilterBuilder(position)
   }
 
-  public setOffset (offset: Position): CreepFilterBuilder {
+  public setOffset (offset: P.Position): CreepFilterBuilder {
     super.setOffset(offset)
     return this
   }
 
   public setOffsetXY (x: number, y: number) {
-    const position = { x, y } as Position
+    const position = { x, y } as P.Position
     return this.setOffset(position)
   }
 
-  public withBodyTypeAtPosition (bodyType: string, position: Position) : CreepFilterBuilder {
+  public withBodyTypeAtPosition (bodyType: string, position: P.Position) : CreepFilterBuilder {
     this.bodyTypes.push(bodyType)
     super.with(position)
     return this
   }
 
   public withBodyTypeAtXY (bodyType: string, x: number, y: number) : CreepFilterBuilder {
-    const position = { x, y } as Position
+    const position = { x, y } as P.Position
     return this.withBodyTypeAtPosition(bodyType, position)
   }
 
@@ -1269,7 +1273,7 @@ class PositionStatistics {
     this.max = sorted[sorted.length - 1]
     this.median = sorted[Math.floor(sorted.length / 2)]
 
-    const ticksRemaining = TICK_LIMIT - getTicks()
+    const ticksRemaining = TICK_LIMIT - U.getTicks()
 
     if (sorted[0] > ticksRemaining) {
       this.canReach = 0
@@ -1284,20 +1288,20 @@ class PositionStatistics {
     }
   }
 
-  static forCreepsAndPosition (creeps: Creep[], position: Position) : PositionStatistics {
+  static forCreepsAndPosition (creeps: P.Creep[], position: P.Position) : PositionStatistics {
     const ranges = creeps.filter(operational).map(
-      function (creep: Creep) : number {
-        return get8WayGridRange(position, creep as Position)
+      function (creep: P.Creep) : number {
+        return get8WayGridRange(position, creep as P.Position)
       }
     )
 
     return new PositionStatistics(ranges)
   }
 
-  static forCreepsAndFlag (creeps: Creep[], flag?: Flag) : PositionStatistics {
+  static forCreepsAndFlag (creeps: P.Creep[], flag?: ARENA.Flag) : PositionStatistics {
     if (!exists(flag)) return new PositionStatistics([])
 
-    return PositionStatistics.forCreepsAndPosition(creeps, flag! as Position)
+    return PositionStatistics.forCreepsAndPosition(creeps, flag! as P.Position)
   }
 
   toString () : string {
@@ -1305,8 +1309,8 @@ class PositionStatistics {
   }
 }
 
-let myFlag : Flag | undefined
-let enemyFlag : Flag | undefined
+let myFlag : ARENA.Flag | undefined
+let enemyFlag : ARENA.Flag | undefined
 
 let flagDistance : number
 let enemyAttacked : boolean = false
@@ -1320,11 +1324,11 @@ const defenceOrRushRandom : Goal[] = []
 const defenceOrRushOrganised : Goal [] = []
 const prepare : Goal[] = []
 
-function handleUnexpectedCreeps (creeps: Creep[]) : void {
+function handleUnexpectedCreeps (creeps: P.Creep[]) : void {
   for (const creep of creeps) {
     console.log('Unexpected creep ', creep)
     if (enemyFlag) {
-      unexpecteds.push(new CreepPositionGoal(creep, enemyFlag as Position))
+      unexpecteds.push(new CreepPositionGoal(creep, enemyFlag as P.Position))
     }
   }
 }
@@ -1344,25 +1348,25 @@ function plan () : void {
     return
   }
 
-  flagDistance = get8WayGridRange(myFlag as Position, enemyFlag as Position)
+  flagDistance = get8WayGridRange(myFlag as P.Position, enemyFlag as P.Position)
 
   // check if all expected creeps are in place
-  const myCreepsFilter = CreepFilterBuilder.around(myFlag as Position)
+  const myCreepsFilter = CreepFilterBuilder.around(myFlag as P.Position)
     .setOffsetXY(-3, -3)
-    .withBodyTypeAtXY(ATTACK, 8, 7)
-    .withBodyTypeAtXY(ATTACK, 7, 8)
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 6)
-    .withBodyTypeAtXY(RANGED_ATTACK, 6, 8)
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 5)
-    .withBodyTypeAtXY(RANGED_ATTACK, 5, 8)
-    .withBodyTypeAtXY(RANGED_ATTACK, 8, 4)
-    .withBodyTypeAtXY(RANGED_ATTACK, 4, 8)
-    .withBodyTypeAtXY(HEAL, 8, 3)
-    .withBodyTypeAtXY(HEAL, 3, 8)
-    .withBodyTypeAtXY(HEAL, 8, 2)
-    .withBodyTypeAtXY(HEAL, 2, 8)
-    .withBodyTypeAtXY(HEAL, 8, 1)
-    .withBodyTypeAtXY(HEAL, 1, 8)
+    .withBodyTypeAtXY(C.ATTACK, 8, 7)
+    .withBodyTypeAtXY(C.ATTACK, 7, 8)
+    .withBodyTypeAtXY(C.RANGED_ATTACK, 8, 6)
+    .withBodyTypeAtXY(C.RANGED_ATTACK, 6, 8)
+    .withBodyTypeAtXY(C.RANGED_ATTACK, 8, 5)
+    .withBodyTypeAtXY(C.RANGED_ATTACK, 5, 8)
+    .withBodyTypeAtXY(C.RANGED_ATTACK, 8, 4)
+    .withBodyTypeAtXY(C.RANGED_ATTACK, 4, 8)
+    .withBodyTypeAtXY(C.HEAL, 8, 3)
+    .withBodyTypeAtXY(C.HEAL, 3, 8)
+    .withBodyTypeAtXY(C.HEAL, 8, 2)
+    .withBodyTypeAtXY(C.HEAL, 2, 8)
+    .withBodyTypeAtXY(C.HEAL, 8, 1)
+    .withBodyTypeAtXY(C.HEAL, 1, 8)
     .autoRotate()
     .build()
 
@@ -1378,7 +1382,7 @@ function plan () : void {
     handleUnexpectedCreeps(unexpected)
   }
 
-  const defenceGoals = GridCreepPositionGoalBuilder.around(myFlag as Position)
+  const defenceGoals = GridCreepPositionGoalBuilder.around(myFlag as P.Position)
     .setOffsetXY(-3, -3)
     .withCreepToXY(expected[0], 6, 3)
     .withCreepToXY(expected[1], 3, 6)
@@ -1399,7 +1403,7 @@ function plan () : void {
 
   const powerUpAll = new BodyPartGoal()
   for (const defenceGoal of defenceGoals) {
-    const rushGoal = new CreepPositionGoal(defenceGoal.creep, enemyFlag as Position)
+    const rushGoal = new CreepPositionGoal(defenceGoal.creep, enemyFlag as P.Position)
 
     defence.push(defenceGoal)
     rushRandom.push(rushGoal)
@@ -1420,10 +1424,10 @@ function plan () : void {
   for (const line of lines) {
     const doDefence = new OneOrMoreGoal(line)
     const doOffence = LinePositionGoal.of(line.map(
-      function (goal: CreepPositionGoal) : Creep {
+      function (goal: CreepPositionGoal) : P.Creep {
         return goal.creep
       }
-    ), enemyFlag as Position)
+    ), enemyFlag as P.Position)
 
     rushOrganised.push(doOffence)
     defenceOrRushOrganised.push(new OrGoal([doDefence, doOffence]))
@@ -1452,7 +1456,7 @@ function plan () : void {
     prepare.push(towerAssistGoal)
   }
 
-  console.log('Planning complete at ' + getCpuTime())
+  console.log('Planning complete at ' + U.getCpuTime())
 }
 
 function advanceGoals () : void {
@@ -1460,7 +1464,7 @@ function advanceGoals () : void {
 
   if (myFlag === undefined || enemyFlag === undefined) return
 
-  const ticks = getTicks()
+  const ticks = U.getTicks()
 
   const early = ticks < flagDistance / 2
   const hot = ticks > TICK_LIMIT - MAP_SIDE_SIZE
