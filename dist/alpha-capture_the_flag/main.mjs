@@ -1,6 +1,6 @@
 import assignToGrids from './node_modules/grid-assign-js/dist/lap-jv/index.mjs';
 import { StructureTower, Creep } from '/game/prototypes';
-import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, BODYPART_COST, BODYPART_HITS, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_OPTIMAL_RANGE, TOUGH, ERR_TIRED, ERR_INVALID_ARGS, TOWER_RANGE, TOWER_POWER_HEAL, TOWER_POWER_ATTACK, ERR_NOT_IN_RANGE, ATTACK_POWER, RANGED_ATTACK_POWER, HEAL_POWER, RANGED_HEAL_POWER, MOVE, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
+import { ATTACK, RANGED_ATTACK, HEAL, ERR_NO_BODYPART, OK, TOWER_OPTIMAL_RANGE, BODYPART_COST, BODYPART_HITS, TOUGH, ERR_TIRED, ERR_INVALID_ARGS, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_RANGE, TOWER_POWER_HEAL, TOWER_POWER_ATTACK, ERR_NOT_IN_RANGE, ATTACK_POWER, RANGED_ATTACK_POWER, HEAL_POWER, RANGED_HEAL_POWER, MOVE, ERR_NOT_ENOUGH_ENERGY, ERR_INVALID_TARGET, ERR_NOT_OWNER, RANGED_ATTACK_DISTANCE_RATE, TOWER_FALLOFF, TOWER_FALLOFF_RANGE } from '/game/constants';
 import { getTicks, getCpuTime, getObjectsByPrototype, getRange, getDirection } from '/game/utils';
 import { Visual } from '/game/visual';
 import { Flag, BodyPart } from '/arena/season_alpha/capture_the_flag/basic';
@@ -177,44 +177,6 @@ class StructureTowerScore {
             return 0;
         const powerAtOptimal = this.creep.my ? TOWER_POWER_HEAL : TOWER_POWER_ATTACK;
         return towerPower(powerAtOptimal, this.range);
-    }
-}
-function operateTower(tower) {
-    if (tower.cooldown > 0)
-        return;
-    if ((tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST)
-        return;
-    const allCreepsInRange = allCreeps()
-        .filter(operational)
-        .filter(function (creep) {
-        return creep.my ? notMaxHits(creep) : notZeroHits(creep);
-    })
-        .map(function (creep) {
-        const range = getRange(tower, creep);
-        return new StructureTowerScore(creep, range);
-    })
-        .filter(function (target) {
-        if (target.creep.my) {
-            return target.range <= TOWER_OPTIMAL_RANGE * 2;
-        }
-        else {
-            return target.range <= TOWER_OPTIMAL_RANGE * 2;
-        }
-    })
-        .sort(function (a, b) {
-        return b.score - a.score;
-    });
-    if (allCreepsInRange.length === 0)
-        return;
-    const power = allCreepsInRange[0].power;
-    const target = allCreepsInRange[0].creep;
-    if (target.my) {
-        registerHeal(target, power);
-        tower.heal(target);
-    }
-    else {
-        registerDamage(target, power);
-        tower.attack(target);
     }
 }
 class AttackableAndRange {
@@ -399,8 +361,6 @@ function autoCombat() {
     myCreeps.forEach(function (creep) {
         autoAll(creep, enemyAttackables, myHealableCreeps);
     });
-    // towers operate after since they have better range and can be more tactical
-    myPlayerInfo.towers.filter(operational).forEach(operateTower);
 }
 class CreepLine {
     // head at index 0
@@ -766,6 +726,92 @@ class BodyPartGoal {
         return MAP_SIDE_SIZE / 2;
     }
 }
+function mapTowerRcToGoalRc(inRc) {
+    switch (inRc) {
+        case OK:
+        case ERR_NOT_OWNER:
+        case ERR_TIRED:
+            return inRc;
+        case ERR_INVALID_TARGET:
+            return ERR_INVALID_ARGS;
+        case ERR_NOT_ENOUGH_ENERGY:
+            return ERR_TIRED;
+    }
+}
+class TowerGoalBase {
+    constructor(tower, shotReserve) {
+        this.tower = tower;
+        this.shotReserve = shotReserve;
+    }
+    filterCreep(creep) {
+        return true;
+    }
+    filterTarget(target) {
+        return true;
+    }
+    advance(options) {
+        if (this.tower.cooldown > 0)
+            return mapTowerRcToGoalRc(ERR_TIRED);
+        const hasEnergy = this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0;
+        const reserveEnergy = (this.shotReserve + 1) * TOWER_ENERGY_COST;
+        if (hasEnergy < reserveEnergy)
+            return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY);
+        const towerPosition = this.tower;
+        const inRange = allCreeps()
+            .filter(operational)
+            .filter(this.filterCreep)
+            .map(function (creep) {
+            const range = getRange(towerPosition, creep);
+            return new StructureTowerScore(creep, range);
+        })
+            .filter(function (target) {
+            return target.range <= TOWER_RANGE;
+        })
+            .filter(this.filterTarget)
+            .sort(function (a, b) {
+            return b.score - a.score;
+        });
+        if (inRange.length === 0)
+            return mapTowerRcToGoalRc(ERR_INVALID_TARGET);
+        const target = inRange[0].creep;
+        const power = inRange[0].power;
+        let rc;
+        if (target.my) {
+            registerHeal(target, power);
+            rc = this.tower.heal(target);
+        }
+        else {
+            registerDamage(target, power);
+            rc = this.tower.attack(target);
+        }
+        return mapTowerRcToGoalRc(rc);
+    }
+    valid() {
+        return operational(this.tower);
+    }
+    cost(options) {
+        return this.tower.store.getFreeCapacity(RESOURCE_ENERGY) || 0;
+    }
+}
+class TowerDefenceGoal extends TowerGoalBase {
+    constructor(tower) {
+        super(tower, 0);
+    }
+    filterCreep(creep) {
+        return creep.my ? notMaxHits(creep) : notZeroHits(creep);
+    }
+    filterTarget(target) {
+        return target.range <= TOWER_OPTIMAL_RANGE * 2;
+    }
+}
+class TowerHealAlonesGoal extends TowerGoalBase {
+    constructor(tower) {
+        super(tower, 1);
+    }
+    filterCreep(creep) {
+        return creep.my ? notMaxHits(creep) : false;
+    }
+}
 class OneOrMoreGoal {
     constructor(goals) {
         this.goals = goals;
@@ -1086,6 +1132,17 @@ function plan() {
     rushOrganised.push(defenceGoals[13]);
     defenceOrRushOrganised.push(defenceGoals[13]);
     prepare.push(defenceGoals[13]);
+    for (const tower of myPlayerInfo.towers) {
+        const towerDefenceGoal = new TowerDefenceGoal(tower);
+        const towerAssistGoal = new TowerHealAlonesGoal(tower);
+        rushRandom.push(towerAssistGoal);
+        rushOrganised.push(towerAssistGoal);
+        powerUp.push(towerAssistGoal);
+        defence.push(towerDefenceGoal);
+        defenceOrRushRandom.push(towerDefenceGoal);
+        defenceOrRushOrganised.push(towerDefenceGoal);
+        prepare.push(towerAssistGoal);
+    }
     console.log('Planning complete at ' + getCpuTime());
 }
 function advanceGoals() {
