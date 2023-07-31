@@ -1,7 +1,7 @@
 import assignToGrids, { point as CostPoint, metricFunc as CostFunction } from 'grid-assign-js/dist/lap-jv/index'
 
-import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower, CreepRangedMassAttackResult } from 'game/prototypes'
-import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH, BODYPART_COST, BODYPART_HITS, TOWER_POWER_ATTACK, TOWER_POWER_HEAL, ATTACK_POWER, HEAL_POWER, RANGED_HEAL_POWER, TOWER_CAPACITY } from 'game/constants'
+import { BodyPartType, Creep, CreepAttackResult, CreepHealResult, CreepMoveResult, CreepRangedAttackResult, CreepRangedHealResult, GameObject, OwnedStructure, Position, Structure, StructureTower, CreepRangedMassAttackResult, TowerHealResult, TowerAttackResult } from 'game/prototypes'
+import { OK, ATTACK, HEAL, MOVE, RANGED_ATTACK, RANGED_ATTACK_DISTANCE_RATE, RANGED_ATTACK_POWER, RESOURCE_ENERGY, TOWER_ENERGY_COST, TOWER_FALLOFF, TOWER_FALLOFF_RANGE, TOWER_OPTIMAL_RANGE, TOWER_RANGE, ERR_NO_BODYPART, ERR_TIRED, ERR_INVALID_ARGS, ERR_NOT_IN_RANGE, TOUGH, BODYPART_COST, BODYPART_HITS, TOWER_POWER_ATTACK, TOWER_POWER_HEAL, ATTACK_POWER, HEAL_POWER, RANGED_HEAL_POWER, TOWER_CAPACITY, ERR_NOT_ENOUGH_ENERGY, ERR_INVALID_TARGET } from 'game/constants'
 import { Direction, FindPathOptions, getCpuTime, getDirection, getObjectsByPrototype, getRange, getTicks } from 'game/utils'
 import { Color, LineVisualStyle, Visual } from 'game/visual'
 import { BodyPart, Flag } from 'arena/season_alpha/capture_the_flag/basic'
@@ -945,6 +945,10 @@ class BodyPartGoal implements Goal {
   }
 }
 
+function mapTowerRcToGoalRc (inRc: TowerHealResult & TowerAttackResult) : CreepMoveResult {
+
+}
+
 class TowerDefenceGoal implements Goal {
   tower: StructureTower
 
@@ -953,8 +957,8 @@ class TowerDefenceGoal implements Goal {
   }
 
   advance(options?: FindPathOptions): CreepMoveResult {
-    if (this.tower.cooldown > 0) return
-    if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return
+    if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(ERR_TIRED)
+    if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
   
     const allCreepsInRange = allCreeps()
       .filter(operational)
@@ -984,18 +988,45 @@ class TowerDefenceGoal implements Goal {
         }
       )
   
-    if (allCreepsInRange.length === 0) return
+    if (allCreepsInRange.length === 0) return mapTowerRcToGoalRc(ERR_INVALID_TARGET)
   
     const power = allCreepsInRange[0].power
     const target = allCreepsInRange[0].creep
   
+    let rc : TowerHealResult & TowerAttackResult
+
     if (target.my) {
       registerHeal(target, power)
-      this.tower.heal(target)
+      rc = this.tower.heal(target)
     } else {
       registerDamage(target, power)
-      this.tower.attack(target)
+      rc = this.tower.attack(target)
     }
+
+    return mapTowerRcToGoalRc(rc)
+  }
+
+  valid(): boolean {
+    return operational(this.tower)
+  }
+
+  cost(options?: FindPathOptions): number {
+    return this.tower.store.getFreeCapacity(RESOURCE_ENERGY) || 0
+  }
+}
+
+class TowerHealAlonesGoal implements Goal {
+  tower: StructureTower
+
+  constructor (tower: StructureTower) {
+    this.tower = tower
+  }
+
+  advance(options?: FindPathOptions): CreepMoveResult {
+    if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(ERR_TIRED)
+    if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
+
+    return mapTowerRcToGoalRc(OK)
   }
 
   valid(): boolean {
@@ -1410,14 +1441,15 @@ function plan () : void {
 
   for (const tower of myPlayerInfo.towers) {
     const towerDefenceGoal = new TowerDefenceGoal(tower)
+    const towerAssistGoal = new TowerHealAlonesGoal(tower)
 
-    rushRandom.push(towerDefenceGoal)
-    rushOrganised.push(towerDefenceGoal)
-    powerUp.push(towerDefenceGoal)
+    rushRandom.push(towerAssistGoal)
+    rushOrganised.push(towerAssistGoal)
+    powerUp.push(towerAssistGoal)
     defence.push(towerDefenceGoal)
     defenceOrRushRandom.push(towerDefenceGoal)
     defenceOrRushOrganised.push(towerDefenceGoal)
-    prepare.push(towerDefenceGoal)
+    prepare.push(towerAssistGoal)
   }
 
   console.log('Planning complete at ' + getCpuTime())
