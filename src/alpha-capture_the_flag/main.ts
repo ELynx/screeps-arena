@@ -949,7 +949,14 @@ function mapTowerRcToGoalRc (inRc: P.TowerHealResult & P.TowerAttackResult) : P.
   switch (inRc) {
     case C.OK:
     case C.ERR_NOT_OWNER:
+    case C.ERR_TIRED:
       return inRc
+
+    case C.ERR_INVALID_TARGET:
+      return C.ERR_INVALID_ARGS
+
+    case C.ERR_NOT_ENOUGH_ENERGY:
+      return C.ERR_TIRED
   }
 }
 
