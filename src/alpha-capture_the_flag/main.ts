@@ -509,7 +509,7 @@ class CreepLine {
       const ri = this.locoToWagonIndex(i, options)
       const loco = this.creeps[ri]
       if (operational(loco)) {
-        return get8WayGridRange(loco as Position, target)
+        return getRange(loco as Position, target)
       }
     }
 
@@ -675,7 +675,7 @@ class CreepPositionGoal implements Goal {
   }
 
   cost (options?: MoreFindPathOptions): number {
-    return get8WayGridRange(this.creep as Position, this.position)
+    return getRange(this.creep as Position, this.position)
   }
 }
 
