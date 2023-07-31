@@ -960,24 +960,33 @@ function mapTowerRcToGoalRc (inRc: TowerHealResult & TowerAttackResult) : CreepM
   }
 }
 
-class TowerDefenceGoal implements Goal {
+class TowerGoalBase {
   tower: StructureTower
+  shotReserve: number
 
-  constructor (tower: StructureTower) {
+  protected constructor (tower: StructureTower, shotReserve: number) {
     this.tower = tower
+    this.shotReserve = shotReserve
+  }
+
+  protected filterCreep (creep: Creep) : boolean {
+    return true
+  }
+
+  protected filterTarget (target: StructureTowerScore) : boolean {
+    return true
   }
 
   advance(options?: FindPathOptions): CreepMoveResult {
     if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(ERR_TIRED)
-    if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < TOWER_ENERGY_COST) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
+
+    const hasEnergy = this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0
+    const reserveEnergy = (this.shotReserve + 1) * TOWER_ENERGY_COST
+    if (hasEnergy < reserveEnergy) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
   
     const inRange = allCreeps()
       .filter(operational)
-      .filter(
-        function (creep: Creep) : boolean {
-          return creep.my ? notMaxHits(creep) : notZeroHits(creep)
-        }
-      )
+      .filter(this.filterCreep)
       .map(
         function (creep: Creep) : StructureTowerScore {
           const range = getRange(this.tower as Position, creep as Position)
@@ -986,13 +995,10 @@ class TowerDefenceGoal implements Goal {
       )
       .filter(
         function (target: StructureTowerScore) : boolean {
-          if (target.creep.my) {
-            return target.range <= TOWER_OPTIMAL_RANGE * 2
-          } else {
-            return target.range <= TOWER_OPTIMAL_RANGE * 2
-          }
+          return target.range <= TOWER_RANGE
         }
       )
+      .filter(this.filterTarget)
       .sort(
         function (a: StructureTowerScore, b: StructureTowerScore) : number {
           return b.score - a.score
@@ -1026,59 +1032,27 @@ class TowerDefenceGoal implements Goal {
   }
 }
 
-class TowerHealAlonesGoal implements Goal {
-  tower: StructureTower
-
+class TowerDefenceGoal extends TowerGoalBase implements Goal {
   constructor (tower: StructureTower) {
-    this.tower = tower
+    super(tower, 0)
   }
 
-  advance(options?: FindPathOptions): CreepMoveResult {
-    if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(ERR_TIRED)
-    // keep one shot in reserve
-    if ((this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0) < 2 * TOWER_ENERGY_COST) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
-
-    const inRange = allCreeps()
-      .filter(operational)
-      .filter(
-        function (creep: Creep) : boolean {
-          return creep.my ? notMaxHits(creep) : false
-        }
-      )
-      .map(
-        function (creep: Creep) : StructureTowerScore {
-          const range = getRange(this.tower as Position, creep as Position)
-          return new StructureTowerScore(creep, range)
-        }
-      )
-      .filter(
-        function (target: StructureTowerScore) : boolean {
-          return target.range <= TOWER_RANGE
-        }
-      )
-      .sort(
-        function (a: StructureTowerScore, b: StructureTowerScore) : number {
-          return b.score - a.score
-        }
-      )
-  
-    if (inRange.length === 0) return mapTowerRcToGoalRc(ERR_INVALID_TARGET)
-  
-    const target = inRange[0].creep
-    const power = inRange[0].power
-    
-    registerHeal(target, power)
-    const rc = this.tower.heal(target)
-
-    return mapTowerRcToGoalRc(rc)
+  protected filterCreep(creep: Creep): boolean {
+    return creep.my ? notMaxHits(creep) : notZeroHits(creep)
   }
 
-  valid(): boolean {
-    return operational(this.tower)
+  protected filterTarget(target: StructureTowerScore): boolean {
+    return target.range <= TOWER_OPTIMAL_RANGE * 2
+  }
+}
+
+class TowerHealAlonesGoal extends TowerGoalBase implements Goal {
+  constructor (tower: StructureTower) {
+    super(tower, 1)
   }
 
-  cost(options?: FindPathOptions): number {
-    return this.tower.store.getFreeCapacity(RESOURCE_ENERGY) || 0
+  protected filterCreep(creep: Creep): boolean {
+    return creep.my ? notMaxHits(creep) : false
   }
 }
 
