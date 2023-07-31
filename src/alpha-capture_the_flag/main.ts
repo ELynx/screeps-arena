@@ -977,13 +977,13 @@ class TowerGoalBase {
     return true
   }
 
-  advance(options?: FindPathOptions): CreepMoveResult {
+  advance (options?: FindPathOptions): CreepMoveResult {
     if (this.tower.cooldown > 0) return mapTowerRcToGoalRc(ERR_TIRED)
 
     const hasEnergy = this.tower.store.getUsedCapacity(RESOURCE_ENERGY) || 0
     const reserveEnergy = (this.shotReserve + 1) * TOWER_ENERGY_COST
     if (hasEnergy < reserveEnergy) return mapTowerRcToGoalRc(ERR_NOT_ENOUGH_ENERGY)
-  
+
     const inRange = allCreeps()
       .filter(operational)
       .filter(this.filterCreep)
@@ -1004,12 +1004,12 @@ class TowerGoalBase {
           return b.score - a.score
         }
       )
-  
+
     if (inRange.length === 0) return mapTowerRcToGoalRc(ERR_INVALID_TARGET)
-  
+
     const target = inRange[0].creep
     const power = inRange[0].power
-    
+
     let rc : TowerHealResult & TowerAttackResult
 
     if (target.my) {
@@ -1023,11 +1023,11 @@ class TowerGoalBase {
     return mapTowerRcToGoalRc(rc)
   }
 
-  valid(): boolean {
+  valid (): boolean {
     return operational(this.tower)
   }
 
-  cost(options?: FindPathOptions): number {
+  cost (options?: FindPathOptions): number {
     return this.tower.store.getFreeCapacity(RESOURCE_ENERGY) || 0
   }
 }
@@ -1037,11 +1037,11 @@ class TowerDefenceGoal extends TowerGoalBase implements Goal {
     super(tower, 0)
   }
 
-  protected filterCreep(creep: Creep): boolean {
+  protected filterCreep (creep: Creep): boolean {
     return creep.my ? notMaxHits(creep) : notZeroHits(creep)
   }
 
-  protected filterTarget(target: StructureTowerScore): boolean {
+  protected filterTarget (target: StructureTowerScore): boolean {
     return target.range <= TOWER_OPTIMAL_RANGE * 2
   }
 }
@@ -1051,7 +1051,7 @@ class TowerHealAlonesGoal extends TowerGoalBase implements Goal {
     super(tower, 1)
   }
 
-  protected filterCreep(creep: Creep): boolean {
+  protected filterCreep (creep: Creep): boolean {
     return creep.my ? notMaxHits(creep) : false
   }
 }
