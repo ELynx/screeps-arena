@@ -1335,6 +1335,7 @@ const unexpecteds : Goal[] = []
 const rushRandom : Goal[] = []
 const rushOrganised : Goal[] = []
 const powerUp : Goal[] = []
+const pufflefish : Goal[] = []
 const defence : Goal[] = []
 const defenceOrRushRandom : Goal[] = []
 const defenceOrRushOrganised : Goal [] = []
@@ -1482,16 +1483,17 @@ function advanceGoals () : void {
 
   const ticks = getTicks()
 
-  const early = ticks < flagDistance / 2
-  const hot = ticks > TICK_LIMIT - MAP_SIDE_SIZE
+  const veryEarly = ticks < flagDistance / 2
+  const early = ticks < flagDistance
   const endspiel = ticks > TICK_LIMIT - MAP_SIDE_SIZE * 2.5
-
+  const finale = ticks > TICK_LIMIT - MAP_SIDE_SIZE
+  
   const enemyOffence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, myFlag)
   const enemyDefence = PositionStatistics.forCreepsAndFlag(enemyPlayerInfo.creeps, enemyFlag)
 
   // wiped / too far away
   if (enemyOffence.canReach === 0) {
-    if (hot) {
+    if (finale) {
       console.log('A. rushRandom')
       rushRandom.forEach(advance)
     } else if (endspiel) {
@@ -1507,7 +1509,7 @@ function advanceGoals () : void {
 
   // idle / castled
   if (enemyDefence.max < MAP_SIDE_SIZE_SQRT) {
-    if (hot) {
+    if (finale) {
       console.log('D. rushRandom')
       rushRandom.forEach(advance)
     } else if (endspiel) {
@@ -1524,9 +1526,9 @@ function advanceGoals () : void {
   // enemy started moving
 
   // brace for early impact
-  if (early) {
-    console.log('G. defence')
-    defence.forEach(advance)
+  if (veryEarly) {
+    console.log('G. pufflefish')
+    pufflefish.forEach(advance)
 
     return
   }
@@ -1539,7 +1541,7 @@ function advanceGoals () : void {
     }
 
     // continue if deep in, otherwise return and help
-    if (hot) {
+    if (finale) {
       console.log('H. defenceOrRushRandom')
       defenceOrRushRandom.forEach(advance)
     } else {
